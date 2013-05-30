@@ -1,31 +1,27 @@
 #!/usr/bin/env node
 "use strict";
 
+/* Load required modules */
 var fs = require('fs');
 var request = require('request');
 var domino = require('domino');
 var urlParser = require('url');
 var pathParser = require('path');
 var http = require('follow-redirects').http;
-var jquery = require('jquery');
 var querystring = require('querystring');
 
-var title = 'Paris';
-var urlBase = 'http://parsoid.wmflabs.org/en/';
-var wikiBase = 'http://en.wikipedia.org/wiki/';
-var directory = 'static';
+/* Global variables */
+var targetDirectory = 'static';
+var articleIds = [ 'Kiwix' ];
+var parsoidUrl = 'http://parsoid.wmflabs.org/en/';
+var webUrl = 'http://en.wikipedia.org/wiki/';
 
-var url = urlBase + title;
-var base = urlParser.parse( urlBase ).protocol + '//' + 
-    urlParser.parse( urlBase ).host +
-    urlParser.parse( urlBase ).pathname;
-
-console.log( 'Creating directory ' + directory + '...' );
-fs.mkdir(directory, function(e) {});
+/* Initialization */
+createTargetDirectories( targetDirectory );
 
 console.log( 'Creating stylesheet...' );
-fs.unlink( directory + '/style.css' );
-request( wikiBase + title , function( error, response, html ) {
+fs.unlink( targetDirectory + '/style.css' );
+request( webUrl, function( error, response, html ) {
     var doc = domino.createDocument( html );
     var links = doc.getElementsByTagName( 'link' );
 
@@ -33,29 +29,23 @@ request( wikiBase + title , function( error, response, html ) {
 	var link = links[i];
 	if (link.getAttribute('rel') === 'stylesheet') {
 	    console.log( 'Downloading CSS from ' + 'http:' + link.getAttribute('href'));
-	    downloadFileAndConcatenate( 'http:' + link.getAttribute('href'), directory + '/style.css' );
+	    downloadFileAndConcatenate( 'http:' + link.getAttribute('href'), targetDirectory + '/style.css' );
 	}
     }
 });
 
-console.log( 'Downloading ' + url + '...' );
-request( url, function( error, response, body ) {
-    parseHtml( body );
+/* Download articles */
+articleIds.map( function( articleId ) {
+    var articleUrl = parsoidUrl + articleId ;
+    console.log( 'Downloading ' + articleUrl + '...' );
+    request( articleUrl, function( error, response, body ) {
+	saveArticle( articleId, body );
+    });
 });
 
-function parseHtml( html ) {
+function saveArticle( articleId, html ) {
     console.log( 'Parsing HTML/RDF...' );
-
-    /* Get the base... and remove it */
     var doc = domino.createDocument( html );
-    var baseNode = doc.getElementsByTagName( 'base' )[0];
-    if ( baseNode ) {
-	base = 'http:' + baseNode.getAttribute( 'href' );
-	base = urlParser.parse( urlBase ).protocol + '//' + 
-	    urlParser.parse( base ).host +
-	    pathParser.dirname( urlParser.parse( base ).pathname ) + '/';
-	deleteNode( baseNode );
-    }
 
     /* Go through all images */
     var imgs = doc.getElementsByTagName( 'img' );
@@ -65,7 +55,7 @@ function parseHtml( html ) {
 	var filename = querystring.unescape( pathParser.basename( urlParser.parse( src ).pathname ) );
 
 	/* Download image */
-	downloadFile(src, directory + '/' + filename );
+	downloadFile(src, targetDirectory  + '/' + filename );
 
 	/* Change image source attribute to point to the local image */
 	img.setAttribute( 'src', filename );
@@ -84,7 +74,12 @@ function parseHtml( html ) {
 	deleteNode( node );
     }
 
-    /* Remove parsoid stuff */
+    /* Remove all head child nodes */
+    var headNode = doc.getElementsByTagName('head')[0];
+    var headChildNodes = headNode.childNodes;
+    while ( headNode.childNodes.length > 0 ) {
+	deleteNode( headNode.childNodes[0] );
+    }
 
     /* Append stylesheet node */
     var linkNode = doc.createElement('link');
@@ -94,7 +89,7 @@ function parseHtml( html ) {
     headNode = headNode.appendChild(linkNode);
 
     /* Write the static html file */
-    writeFile( doc.documentElement.outerHTML, directory + '/' + title + '.html' );
+    writeFile( doc.documentElement.outerHTML, targetDirectory + '/' + articleId + '.html' );
 }
 
 function deleteNode( node ) {
@@ -117,5 +112,25 @@ function downloadFile( url, path ) {
 function downloadFileAndConcatenate( url, path ) {
     request( url , function( error, response, body ) {
 	fs.appendFile( path, body, function (err) {} );
+    });
+}
+
+/* Create directories for static files */
+function createTargetDirectories( path ) {
+    console.info( 'Creating target directories at \'' + path + '\'...' );
+    createDirectory( path );
+    createDirectory( path + '/style' );
+    createDirectory( path + '/html' );
+    createDirectory( path + '/media' );
+    createDirectory( path + '/js' );
+}
+
+/* Create a directory if necessary */
+function createDirectory( path ) {
+    fs.mkdir( path, function( error ) {
+	if ( ! fs.lstatSync( path ).isDirectory() ) {
+	    console.error( 'Unable to create directory \'' + path + '\'' );
+	    process.exit( 1 );
+	}
     });
 }
