@@ -19,7 +19,7 @@ var jsDirectory = directory + 'js/';
 
 var stylePath = styleDirectory + 'style.css';
 
-var articleIds = [ 'Kiwix' ];
+var articleIds = [ 'Kiwix', 'Paris' ];
 var parsoidUrl = 'http://parsoid.wmflabs.org/en/';
 var webUrl = 'http://en.wikipedia.org/wiki/';
 
@@ -171,7 +171,7 @@ function createDirectories() {
 /* Create a directory if necessary */
 function createDirectory( path ) {
     fs.mkdir( path, function( error ) {
-	if ( ! fs.lstatSync( path ).isDirectory() ) {
+	if ( error && ! (fs.exists(directory) && fs.lstatSync( path ).isDirectory() ) ) {
 	    console.error( 'Unable to create directory \'' + path + '\'' );
 	    process.exit( 1 );
 	}
