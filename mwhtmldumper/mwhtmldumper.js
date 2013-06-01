@@ -11,25 +11,74 @@ var http = require('follow-redirects').http;
 var querystring = require('querystring');
 
 /* Global variables */
-var targetDirectory = 'static';
+var directory = 'static/';
+var styleDirectory = directory + 'style/';
+var htmlDirectory = directory + 'html/';
+var mediaDirectory = directory + 'media/';
+var jsDirectory = directory + 'js/';
+
+var stylePath = styleDirectory + 'style.css';
+
 var articleIds = [ 'Kiwix' ];
 var parsoidUrl = 'http://parsoid.wmflabs.org/en/';
 var webUrl = 'http://en.wikipedia.org/wiki/';
 
 /* Initialization */
-createTargetDirectories( targetDirectory );
+createDirectories();
 
 console.log( 'Creating stylesheet...' );
-fs.unlink( targetDirectory + '/style.css' );
+fs.unlink( stylePath, function() {} );
 request( webUrl, function( error, response, html ) {
     var doc = domino.createDocument( html );
     var links = doc.getElementsByTagName( 'link' );
-
+    var cssUrlRegexp = new RegExp( 'url\\([\'"]{0,1}(.+?)[\'"]{0,1}\\)', 'gi' );
+    var cssDataUrlRegex = new RegExp( '^data' );
+    
     for ( var i = 0; i < links.length ; i++ ) {
 	var link = links[i];
 	if (link.getAttribute('rel') === 'stylesheet') {
-	    console.log( 'Downloading CSS from ' + 'http:' + link.getAttribute('href'));
-	    downloadFileAndConcatenate( 'http:' + link.getAttribute('href'), targetDirectory + '/style.css' );
+	    var url = link.getAttribute('href');
+	    
+	    /* Need a rewrite if url doesn't include protocol */
+	    if ( ! urlParser.parse( url, false, true ).protocol ) {
+		var protocol = urlParser.parse( url, false, true ).protocol || 'http:';
+		var host = urlParser.parse( url, false, true ).host || urlParser.parse( webUrl ).host;
+		var path = urlParser.parse( url, false, true ).path;
+		url = protocol + '//' + host + path;
+	    }
+
+	    console.log( 'Downloading CSS from ' + url );
+	    request( url , function( error, response, body ) {
+
+		/* Downloading CSS dependencies */
+		var match;
+		var rewrittenCss = body;
+
+		while (match = cssUrlRegexp.exec( body ) ) {
+		    var url = match[1];
+
+		    /* Avoid 'data', so no url dependency */
+		    if ( ! url.match( '^data' ) ) {
+			var filename = pathParser.basename( urlParser.parse( url, false, true ).pathname );
+
+			/* Rewrite the CSS */
+			rewrittenCss = rewrittenCss.replace( url, filename );
+
+			/* Need a rewrite if url doesn't include protocol */
+			if ( ! urlParser.parse( url, false, true ).protocol ) {
+			    var protocol = urlParser.parse( url, false, true ).protocol || 'http:';
+			    var host = urlParser.parse( url, false, true ).host || urlParser.parse( webUrl ).host;
+			    var path = urlParser.parse( url, false, true ).path;
+			    url = protocol + '//' + host + path;
+			}
+			
+			/* Download CSS dependency */
+			downloadFile(url, styleDirectory + filename );
+		    }
+		}
+
+		fs.appendFile( stylePath, rewrittenCss, function (err) {} );
+	    });
 	}
     }
 });
@@ -37,7 +86,7 @@ request( webUrl, function( error, response, html ) {
 /* Download articles */
 articleIds.map( function( articleId ) {
     var articleUrl = parsoidUrl + articleId ;
-    console.log( 'Downloading ' + articleUrl + '...' );
+    console.log( 'Downloading article from ' + articleUrl + '...' );
     request( articleUrl, function( error, response, body ) {
 	saveArticle( articleId, body );
     });
@@ -55,7 +104,7 @@ function saveArticle( articleId, html ) {
 	var filename = querystring.unescape( pathParser.basename( urlParser.parse( src ).pathname ) );
 
 	/* Download image */
-	downloadFile(src, targetDirectory  + '/' + filename );
+	downloadFile(src, directory  + '/' + filename );
 
 	/* Change image source attribute to point to the local image */
 	img.setAttribute( 'src', filename );
@@ -84,12 +133,12 @@ function saveArticle( articleId, html ) {
     /* Append stylesheet node */
     var linkNode = doc.createElement('link');
     linkNode.setAttribute('rel', 'stylesheet');
-    linkNode.setAttribute('href', 'style.css');
+    linkNode.setAttribute('href', 'style/style.css');
     var headNode = doc.getElementsByTagName('head')[0];
     headNode = headNode.appendChild(linkNode);
 
     /* Write the static html file */
-    writeFile( doc.documentElement.outerHTML, targetDirectory + '/' + articleId + '.html' );
+    writeFile( doc.documentElement.outerHTML, directory + '/' + articleId + '.html' );
 }
 
 function deleteNode( node ) {
@@ -109,20 +158,14 @@ function downloadFile( url, path ) {
     });
 }
 
-function downloadFileAndConcatenate( url, path ) {
-    request( url , function( error, response, body ) {
-	fs.appendFile( path, body, function (err) {} );
-    });
-}
-
 /* Create directories for static files */
-function createTargetDirectories( path ) {
-    console.info( 'Creating target directories at \'' + path + '\'...' );
-    createDirectory( path );
-    createDirectory( path + '/style' );
-    createDirectory( path + '/html' );
-    createDirectory( path + '/media' );
-    createDirectory( path + '/js' );
+function createDirectories() {
+    console.info( 'Creating directories at \'' + directory + '\'...' );
+    createDirectory( directory );
+    createDirectory( styleDirectory );
+    createDirectory( htmlDirectory );
+    createDirectory( mediaDirectory );
+    createDirectory( jsDirectory );
 }
 
 /* Create a directory if necessary */
