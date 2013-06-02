@@ -49,7 +49,7 @@ var webUrl = 'http://en.wikipedia.org/wiki/';
 /* Initialization */
 createDirectories();
 
-console.log( 'Creating stylesheet...' );
+console.info( 'Creating stylesheet...' );
 fs.unlink( stylePath, function() {} );
 request( webUrl, function( error, response, html ) {
     var doc = domino.createDocument( html );
@@ -70,7 +70,7 @@ request( webUrl, function( error, response, html ) {
 		url = protocol + '//' + host + path;
 	    }
 
-	    console.log( 'Downloading CSS from ' + url );
+	    console.info( 'Downloading CSS from ' + url );
 	    request( url , function( error, response, body ) {
 
 		/* Downloading CSS dependencies */
@@ -109,14 +109,14 @@ request( webUrl, function( error, response, html ) {
 /* Download articles */
 articleIds.map( function( articleId ) {
     var articleUrl = parsoidUrl + articleId ;
-    console.log( 'Downloading article from ' + articleUrl + '...' );
+    console.info( 'Downloading article from ' + articleUrl + '...' );
     request( articleUrl, function( error, response, body ) {
 	saveArticle( articleId, body );
     });
 });
 
 function saveArticle( articleId, html ) {
-    console.log( 'Parsing HTML/RDF...' );
+    console.info( 'Parsing HTML/RDF...' );
     var parsoidDoc = domino.createDocument( html );
     
     /* Go through all images */
@@ -137,7 +137,7 @@ function saveArticle( articleId, html ) {
 	if (linkNode.tagName === 'A' ) {
 	    linkNode.parentNode.replaceChild(img, linkNode);
 	}
-    };
+    }
 
     /* Remove noprint css elements */
     var noprintNodes = parsoidDoc.getElementsByClassName( 'noprint' );
@@ -155,6 +155,16 @@ function saveArticle( articleId, html ) {
     var titleNode = doc.getElementsByTagName( 'title' )[0];
     titleNode.innerHTML = parsoidDoc.getElementsByTagName( 'title' )[0].innerHTML;
 
+    /* Clean the DOM of all uncessary code */
+    var allNodes = doc.getElementsByTagName( '*' );
+    for ( var i = 0; i < allNodes.length ; i++ ) {                                                                                
+        var node = allNodes[i];
+	node.removeAttribute( 'data-parsoid' );
+	node.removeAttribute( 'typeof' );
+	node.removeAttribute( 'about' );
+	node.removeAttribute( 'data-mw' );
+    }
+
     /* Write the static html file */
     writeFile( doc.documentElement.outerHTML, directory + articleId + '.html' );
 }
@@ -164,7 +174,7 @@ function deleteNode( node ) {
 }
 
 function writeFile( data, path ) {
-    console.log( 'Writing ' + path + '...' );
+    console.info( 'Writing ' + path + '...' );
     fs.writeFile( path, data );
 }
 
@@ -173,7 +183,7 @@ function downloadFile( url, path ) {
 	if ( exists ) {
 	    console.info( path + ' already downloaded, download will be skipped.' );
 	} else {
-	    console.log( 'Downloading ' + url + ' at ' + path + '...' );
+	    console.info( 'Downloading ' + url + ' at ' + path + '...' );
 	    var file = fs.createWriteStream( path );
 	    var request = http.get( url, function(response) {
 		response.pipe(file);
