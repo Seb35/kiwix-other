@@ -15,8 +15,9 @@ var directory = 'static/';
 var styleDirectory = directory + 'style/';
 var htmlDirectory = directory + 'html/';
 var mediaDirectory = directory + 'media/';
-var jsDirectory = directory + 'js/';
+var javascriptDirectory = directory + 'js/';
 var stylePath = styleDirectory + 'style.css';
+var javascriptPath = javascriptDirectory + 'tools.js';
 
 /* Article template */
 var templateHtml = function(){/*
@@ -26,11 +27,12 @@ var templateHtml = function(){/*
     <meta charset="UTF-8" />
     <title></title>
     <link rel="stylesheet" href="style/style.css" />
+    <script src="js/tools.js"></script>
   </head>
-<body>
-  <div id="content" style="margin: 0px;">
+<body class="mediawiki" style="background-color: white;">
+  <div id="content" style="margin: 0px; border-width: 0px;">
     <a id="top"></a>
-    <h1 id="firstHeading" class="firstHeading" style="margin-bottom: 0.5em;"></h1>
+    <h1 id="firstHeading" class="firstHeading" style="margin-bottom: 0.5em; background-color: white;"></h1>
     <div id="bodyContent">
       <div id="mw-content-text">
       </div>
@@ -48,65 +50,10 @@ var webUrl = 'http://en.wikipedia.org/wiki/';
 
 /* Initialization */
 createDirectories();
+saveStylesheet();
+saveJavascript();
 
-console.info( 'Creating stylesheet...' );
-fs.unlink( stylePath, function() {} );
-request( webUrl, function( error, response, html ) {
-    var doc = domino.createDocument( html );
-    var links = doc.getElementsByTagName( 'link' );
-    var cssUrlRegexp = new RegExp( 'url\\([\'"]{0,1}(.+?)[\'"]{0,1}\\)', 'gi' );
-    var cssDataUrlRegex = new RegExp( '^data' );
-    
-    for ( var i = 0; i < links.length ; i++ ) {
-	var link = links[i];
-	if (link.getAttribute('rel') === 'stylesheet') {
-	    var url = link.getAttribute('href');
-	    
-	    /* Need a rewrite if url doesn't include protocol */
-	    if ( ! urlParser.parse( url, false, true ).protocol ) {
-		var protocol = urlParser.parse( url, false, true ).protocol || 'http:';
-		var host = urlParser.parse( url, false, true ).host || urlParser.parse( webUrl ).host;
-		var path = urlParser.parse( url, false, true ).path;
-		url = protocol + '//' + host + path;
-	    }
-
-	    console.info( 'Downloading CSS from ' + url );
-	    request( url , function( error, response, body ) {
-
-		/* Downloading CSS dependencies */
-		var match;
-		var rewrittenCss = body;
-
-		while (match = cssUrlRegexp.exec( body ) ) {
-		    var url = match[1];
-
-		    /* Avoid 'data', so no url dependency */
-		    if ( ! url.match( '^data' ) ) {
-			var filename = pathParser.basename( urlParser.parse( url, false, true ).pathname );
-
-			/* Rewrite the CSS */
-			rewrittenCss = rewrittenCss.replace( url, filename );
-
-			/* Need a rewrite if url doesn't include protocol */
-			if ( ! urlParser.parse( url, false, true ).protocol ) {
-			    var protocol = urlParser.parse( url, false, true ).protocol || 'http:';
-			    var host = urlParser.parse( url, false, true ).host || urlParser.parse( webUrl ).host;
-			    var path = urlParser.parse( url, false, true ).path;
-			    url = protocol + '//' + host + path;
-			}
-			
-			/* Download CSS dependency */
-			downloadFile(url, styleDirectory + filename );
-		    }
-		}
-
-		fs.appendFile( stylePath, rewrittenCss, function (err) {} );
-	    });
-	}
-    }
-});
-
-/* Download articles */
+/* Save articles */
 articleIds.map( function( articleId ) {
     var articleUrl = parsoidUrl + articleId ;
     console.info( 'Downloading article from ' + articleUrl + '...' );
@@ -169,6 +116,103 @@ function saveArticle( articleId, html ) {
     writeFile( doc.documentElement.outerHTML, directory + articleId + '.html' );
 }
 
+/* Grab and concatenate javascript files */
+function saveJavascript() {
+    console.info( 'Creating javascript...' );
+    fs.unlink( javascriptPath, function() {} );
+    request( webUrl, function( error, response, html ) {
+	var doc = domino.createDocument( html );
+	var scripts = doc.getElementsByTagName( 'script' );
+	
+	for ( var i = 0; i < scripts.length ; i++ ) {
+	    var script = scripts[i];
+	    var url = script.getAttribute( 'src' );
+
+	    if ( url ) {
+		url = getFullUrl( url );
+		console.info( 'Downloading javascript from ' + url );
+		request( url , function( error, response, body ) {
+		    fs.appendFile( javascriptPath, '\n' + body + '\n', function (err) {} );
+		});
+	    } else {
+		fs.appendFile( javascriptPath, '\n' + script.innerHTML + '\n', function (err) {} );
+	    }
+	}
+    });
+}
+
+/* Grab and concatenate stylesheet files */
+function saveStylesheet() {
+    console.info( 'Creating stylesheet...' );
+    fs.unlink( stylePath, function() {} );
+    request( webUrl, function( error, response, html ) {
+	var doc = domino.createDocument( html );
+	var links = doc.getElementsByTagName( 'link' );
+	var cssUrlRegexp = new RegExp( 'url\\([\'"]{0,1}(.+?)[\'"]{0,1}\\)', 'gi' );
+	var cssDataUrlRegex = new RegExp( '^data' );
+	
+	for ( var i = 0; i < links.length ; i++ ) {
+	    var link = links[i];
+	    if (link.getAttribute('rel') === 'stylesheet') {
+		var url = link.getAttribute('href');
+		
+		/* Need a rewrite if url doesn't include protocol */
+		url = getFullUrl( url );
+		
+		console.info( 'Downloading CSS from ' + url );
+		request( url , function( error, response, body ) {
+		    
+		    /* Downloading CSS dependencies */
+		    var match;
+		    var rewrittenCss = body;
+		    
+		    while (match = cssUrlRegexp.exec( body ) ) {
+			var url = match[1];
+			
+			/* Avoid 'data', so no url dependency */
+			if ( ! url.match( '^data' ) ) {
+			    var filename = pathParser.basename( urlParser.parse( url, false, true ).pathname );
+			    
+			    /* Rewrite the CSS */
+			    rewrittenCss = rewrittenCss.replace( url, filename );
+			    
+			    /* Need a rewrite if url doesn't include protocol */
+			    url = getFullUrl( url );
+			    
+			    /* Download CSS dependency */
+			    downloadFile(url, styleDirectory + filename );
+			}
+		    }
+		    
+		    fs.appendFile( stylePath, rewrittenCss, function (err) {} );
+		});
+	    }
+	}
+    });
+}
+
+/* Create directories for static files */
+function createDirectories() {
+    console.info( 'Creating directories at \'' + directory + '\'...' );
+    createDirectory( directory );
+    createDirectory( styleDirectory );
+    createDirectory( htmlDirectory );
+    createDirectory( mediaDirectory );
+    createDirectory( javascriptDirectory );
+}
+
+/* Multiple developer friendly functions */
+function getFullUrl( url ) {
+    if ( ! urlParser.parse( url, false, true ).protocol ) {
+	var protocol = urlParser.parse( url, false, true ).protocol || 'http:';
+	var host = urlParser.parse( url, false, true ).host || urlParser.parse( webUrl ).host;
+	var path = urlParser.parse( url, false, true ).path;
+	url = protocol + '//' + host + path;
+    }
+
+    return url;
+}
+
 function deleteNode( node ) {
     node.parentNode.removeChild( node );
 }
@@ -192,17 +236,6 @@ function downloadFile( url, path ) {
     });
 }
 
-/* Create directories for static files */
-function createDirectories() {
-    console.info( 'Creating directories at \'' + directory + '\'...' );
-    createDirectory( directory );
-    createDirectory( styleDirectory );
-    createDirectory( htmlDirectory );
-    createDirectory( mediaDirectory );
-    createDirectory( jsDirectory );
-}
-
-/* Create a directory if necessary */
 function createDirectory( path ) {
     fs.mkdir( path, function( error ) {
 	fs.exists( path, function ( exists ) {
@@ -213,3 +246,4 @@ function createDirectory( path ) {
 	});
     });
 }
+
