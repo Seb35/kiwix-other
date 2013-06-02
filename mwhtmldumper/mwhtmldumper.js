@@ -30,7 +30,7 @@ var templateHtml = function(){/*
 <body>
   <div id="content" style="margin: 0px;">
     <a id="top"></a>
-    <h1 id="firstHeading" class="firstHeading"></h1>
+    <h1 id="firstHeading" class="firstHeading" style="margin-bottom: 0.5em;"></h1>
     <div id="bodyContent">
       <div id="mw-content-text">
       </div>
@@ -127,7 +127,7 @@ function saveArticle( articleId, html ) {
 	var filename = querystring.unescape( pathParser.basename( urlParser.parse( src ).pathname ) );
 
 	/* Download image */
-	downloadFile(src, directory  + '/' + filename );
+	downloadFile(src, directory + filename );
 
 	/* Change image source attribute to point to the local image */
 	img.setAttribute( 'src', filename );
@@ -149,11 +149,11 @@ function saveArticle( articleId, html ) {
     /* Create final document by merging template and parsoid documents */
     var doc = templateDoc;
     var contentNode = doc.getElementById( 'mw-content-text' );
-    contentNode.innerHTML = parsoidDoc.getElementsByTagName('body')[0].innerHTML;
+    contentNode.innerHTML = parsoidDoc.getElementsByTagName( 'body' )[0].innerHTML;
     var contentTitleNode = doc.getElementById( 'firstHeading' );
-    contentTitleNode.innerHTML = parsoidDoc.getElementsByTagName('title')[0].innerHTML;
-    var titleNode = doc.getElementsByTagName('title')[0];
-    titleNode.innerHTML = parsoidDoc.getElementsByTagName('title')[0].innerHTML;
+    contentTitleNode.innerHTML = parsoidDoc.getElementsByTagName( 'title' )[0].innerHTML;
+    var titleNode = doc.getElementsByTagName( 'title' )[0];
+    titleNode.innerHTML = parsoidDoc.getElementsByTagName( 'title' )[0].innerHTML;
 
     /* Write the static html file */
     writeFile( doc.documentElement.outerHTML, directory + articleId + '.html' );
@@ -169,10 +169,16 @@ function writeFile( data, path ) {
 }
 
 function downloadFile( url, path ) {
-    console.log( 'Downloading ' + url + ' at ' + path + '...' );
-    var file = fs.createWriteStream( path );
-    var request = http.get( url, function(response) {
-	response.pipe(file);
+    fs.exists( path, function ( exists ) {
+	if ( exists ) {
+	    console.info( path + ' already downloaded, download will be skipped.' );
+	} else {
+	    console.log( 'Downloading ' + url + ' at ' + path + '...' );
+	    var file = fs.createWriteStream( path );
+	    var request = http.get( url, function(response) {
+		response.pipe(file);
+	    });
+	}			    
     });
 }
 
