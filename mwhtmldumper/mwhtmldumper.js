@@ -16,9 +16,32 @@ var styleDirectory = directory + 'style/';
 var htmlDirectory = directory + 'html/';
 var mediaDirectory = directory + 'media/';
 var jsDirectory = directory + 'js/';
-
 var stylePath = styleDirectory + 'style.css';
 
+/* Article template */
+var templateHtml = function(){/*
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title></title>
+    <link rel="stylesheet" href="style/style.css" />
+  </head>
+<body>
+  <div id="content" style="margin: 0px;">
+    <a id="top"></a>
+    <h1 id="firstHeading" class="firstHeading"></h1>
+    <div id="bodyContent">
+      <div id="mw-content-text">
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+*/}.toString().slice(14,-3);
+var templateDoc = domino.createDocument( templateHtml );
+
+/* Input variables */
 var articleIds = [ 'Kiwix', 'Paris' ];
 var parsoidUrl = 'http://parsoid.wmflabs.org/en/';
 var webUrl = 'http://en.wikipedia.org/wiki/';
@@ -94,10 +117,10 @@ articleIds.map( function( articleId ) {
 
 function saveArticle( articleId, html ) {
     console.log( 'Parsing HTML/RDF...' );
-    var doc = domino.createDocument( html );
-
+    var parsoidDoc = domino.createDocument( html );
+    
     /* Go through all images */
-    var imgs = doc.getElementsByTagName( 'img' );
+    var imgs = parsoidDoc.getElementsByTagName( 'img' );
     for ( var i = 0; i < imgs.length ; i++ ) {
 	var img = imgs[i];
 	var src = img.getAttribute( 'src');
@@ -117,28 +140,23 @@ function saveArticle( articleId, html ) {
     };
 
     /* Remove noprint css elements */
-    var noprintNodes = doc.getElementsByClassName( 'noprint' );
+    var noprintNodes = parsoidDoc.getElementsByClassName( 'noprint' );
     for ( var i = 0; i < noprintNodes.length ; i++ ) {
 	var node = noprintNodes[i];
 	deleteNode( node );
     }
 
-    /* Remove all head child nodes */
-    var headNode = doc.getElementsByTagName('head')[0];
-    var headChildNodes = headNode.childNodes;
-    while ( headNode.childNodes.length > 0 ) {
-	deleteNode( headNode.childNodes[0] );
-    }
-
-    /* Append stylesheet node */
-    var linkNode = doc.createElement('link');
-    linkNode.setAttribute('rel', 'stylesheet');
-    linkNode.setAttribute('href', 'style/style.css');
-    var headNode = doc.getElementsByTagName('head')[0];
-    headNode = headNode.appendChild(linkNode);
+    /* Create final document by merging template and parsoid documents */
+    var doc = templateDoc;
+    var contentNode = doc.getElementById( 'mw-content-text' );
+    contentNode.innerHTML = parsoidDoc.getElementsByTagName('body')[0].innerHTML;
+    var contentTitleNode = doc.getElementById( 'firstHeading' );
+    contentTitleNode.innerHTML = parsoidDoc.getElementsByTagName('title')[0].innerHTML;
+    var titleNode = doc.getElementsByTagName('title')[0];
+    titleNode.innerHTML = parsoidDoc.getElementsByTagName('title')[0].innerHTML;
 
     /* Write the static html file */
-    writeFile( doc.documentElement.outerHTML, directory + '/' + articleId + '.html' );
+    writeFile( doc.documentElement.outerHTML, directory + articleId + '.html' );
 }
 
 function deleteNode( node ) {
@@ -171,9 +189,11 @@ function createDirectories() {
 /* Create a directory if necessary */
 function createDirectory( path ) {
     fs.mkdir( path, function( error ) {
-	if ( error && ! (fs.exists(directory) && fs.lstatSync( path ).isDirectory() ) ) {
-	    console.error( 'Unable to create directory \'' + path + '\'' );
-	    process.exit( 1 );
-	}
+	fs.exists( path, function ( exists ) {
+	    if ( error && ! ( exists && fs.lstatSync( path ).isDirectory() ) ) {
+		console.error( 'Unable to create directory \'' + path + '\'' );
+		process.exit( 1 );
+	    }
+	});
     });
 }
