@@ -96,7 +96,7 @@ function saveArticle( articleId, html ) {
 	var a = as[i];
 	var rel = a.getAttribute( 'rel' );
 	
-	if ( rel && rel.substring( 0, 10 ) === 'mw:ExtLink' ) {
+	if ( rel && rel.substring( 0, 10 ) === 'mw:ExtLink' || rel === 'mw:WikiLink/Interwiki' ) {
 	    a.setAttribute( 'class', concatenateToAttribute( a.getAttribute( 'class'), 'external' ) );
 	}
     }
@@ -110,7 +110,6 @@ function saveArticle( articleId, html ) {
 	    var sup = parsoidDoc.createElement( 'sup' );
 	    if ( span.innerHTML ) {
 		sup.innerHTML = span.innerHTML;
-		console.log( span.outerHTML );
 		span.parentNode.replaceChild(sup, span);
 	    } else {
 		deleteNode( span );
