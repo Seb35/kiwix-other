@@ -44,8 +44,8 @@ var templateHtml = function(){/*
 var templateDoc = domino.createDocument( templateHtml );
 
 /* Input variables */
-var articleIds = [ 'Kiwix', 'Paris', 'France' ];
-//var articleIds = [ 'Kiwix' ];
+//var articleIds = [ 'Kiwix', 'Paris', 'France' ];
+var articleIds = [ 'Kiwix' ];
 var parsoidUrl = 'http://parsoid.wmflabs.org/en/';
 var webUrl = 'http://en.wikipedia.org/wiki/';
 
@@ -98,6 +98,23 @@ function saveArticle( articleId, html ) {
 	
 	if ( rel && rel.substring( 0, 10 ) === 'mw:ExtLink' ) {
 	    a.setAttribute( 'class', concatenateToAttribute( a.getAttribute( 'class'), 'external' ) );
+	}
+    }
+
+    /* Go through all reference calls */
+    var spans = parsoidDoc.getElementsByTagName( 'span' );
+    for ( var i = 0; i < spans.length ; i++ ) {
+	var span = spans[i];
+	var rel = span.getAttribute( 'rel' );
+	if ( rel === 'dc:references' ) {
+	    var sup = parsoidDoc.createElement( 'sup' );
+	    if ( span.innerHTML ) {
+		sup.innerHTML = span.innerHTML;
+		console.log( span.outerHTML );
+		span.parentNode.replaceChild(sup, span);
+	    } else {
+		deleteNode( span );
+	    }
 	}
     }
 
