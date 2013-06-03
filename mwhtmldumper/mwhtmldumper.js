@@ -45,6 +45,7 @@ var templateDoc = domino.createDocument( templateHtml );
 
 /* Input variables */
 var articleIds = [ 'Kiwix', 'Paris' ];
+//var articleIds = [ 'Kiwix' ];
 var parsoidUrl = 'http://parsoid.wmflabs.org/en/';
 var webUrl = 'http://en.wikipedia.org/wiki/';
 
@@ -70,7 +71,7 @@ function saveArticle( articleId, html ) {
     var imgs = parsoidDoc.getElementsByTagName( 'img' );
     for ( var i = 0; i < imgs.length ; i++ ) {
 	var img = imgs[i];
-	var src = img.getAttribute( 'src');
+	var src = img.getAttribute( 'src' );
 	var filename = querystring.unescape( pathParser.basename( urlParser.parse( src ).pathname ) );
 
 	/* Download image */
@@ -83,6 +84,17 @@ function saveArticle( articleId, html ) {
 	var linkNode = img.parentNode
 	if (linkNode.tagName === 'A' ) {
 	    linkNode.parentNode.replaceChild(img, linkNode);
+	}
+    }
+
+    /* Go through all links (a tag) */
+    var as = parsoidDoc.getElementsByTagName( 'a' );
+    for ( var i = 0; i < as.length ; i++ ) {
+	var a = as[i];
+	var rel = a.getAttribute( 'rel' );
+	
+	if ( rel && rel.substring( 0, 10 ) === 'mw:ExtLink' ) {
+	    a.setAttribute( 'class', concatenateToAttribute( a.getAttribute( 'class'), 'external' ) );
 	}
     }
 
@@ -110,6 +122,10 @@ function saveArticle( articleId, html ) {
 	node.removeAttribute( 'typeof' );
 	node.removeAttribute( 'about' );
 	node.removeAttribute( 'data-mw' );
+
+	if ( node.getAttribute( 'rel' ) && node.getAttribute( 'rel' ).substr( 0, 3 ) === 'mw:' ) {
+	    node.removeAttribute( 'rel' );
+	}
     }
 
     /* Write the static html file */
@@ -215,6 +231,10 @@ function getFullUrl( url ) {
 
 function deleteNode( node ) {
     node.parentNode.removeChild( node );
+}
+
+function concatenateToAttribute( old, add ) {
+    return old ? old + ' ' + add : add;
 }
 
 function writeFile( data, path ) {
