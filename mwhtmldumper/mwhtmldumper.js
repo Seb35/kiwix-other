@@ -44,7 +44,7 @@ var templateHtml = function(){/*
 var templateDoc = domino.createDocument( templateHtml );
 
 /* Input variables */
-var articleIds = [ 'Kiwix', 'Paris' ];
+var articleIds = [ 'Kiwix', 'Paris', 'France' ];
 //var articleIds = [ 'Kiwix' ];
 var parsoidUrl = 'http://parsoid.wmflabs.org/en/';
 var webUrl = 'http://en.wikipedia.org/wiki/';
@@ -79,6 +79,9 @@ function saveArticle( articleId, html ) {
 
 	/* Change image source attribute to point to the local image */
 	img.setAttribute( 'src', filename );
+	
+	/* Remove useless 'resource' attribute */
+	img.removeAttribute( 'resource' ); 
 
 	/* Remove image link */
 	var linkNode = img.parentNode
@@ -96,6 +99,36 @@ function saveArticle( articleId, html ) {
 	if ( rel && rel.substring( 0, 10 ) === 'mw:ExtLink' ) {
 	    a.setAttribute( 'class', concatenateToAttribute( a.getAttribute( 'class'), 'external' ) );
 	}
+    }
+
+    /* Rewrite thumbnails */
+    var figures = parsoidDoc.getElementsByTagName( 'figure' );
+    for ( var i = 0; i < figures.length ; i++ ) {
+	var figure = figures[i];
+	var image = figure.getElementsByTagName( 'img' )[0];
+	var imageWidth = parseInt( image.getAttribute( 'width' ) );
+	var description = figure.getElementsByTagName( 'figcaption' )[0];
+
+	var thumbDiv = parsoidDoc.createElement( 'div' );
+	thumbDiv.setAttribute
+	thumbDiv.setAttribute( 'class', 'thumb tright' );
+
+	var thumbinnerDiv = parsoidDoc.createElement( 'div' );
+	thumbinnerDiv.setAttribute( 'class', 'thumbinner' );
+	thumbinnerDiv.setAttribute( 'style', 'width:' + ( imageWidth + 2) + 'px' );
+
+	var thumbcaptionDiv = parsoidDoc.createElement( 'div' );
+	thumbcaptionDiv.setAttribute( 'class', 'thumbcaption' );
+	thumbcaptionDiv.setAttribute( 'style', 'text-align: left' );
+	if ( description ) {
+	    thumbcaptionDiv.innerHTML = description.innerHTML
+	}
+
+	thumbinnerDiv.appendChild( image );
+	thumbinnerDiv.appendChild( thumbcaptionDiv );
+	thumbDiv.appendChild( thumbinnerDiv );
+
+	figure.parentNode.replaceChild(thumbDiv, figure);
     }
 
     /* Remove noprint css elements */
