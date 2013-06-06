@@ -19,7 +19,7 @@ var stylePath = styleDirectory + 'style.css';
 var javascriptPath = javascriptDirectory + 'tools.js';
 var withCategories = false;
 var withMedias = true;
-var cssClassBlackList = [ 'noprint', 'ambox', 'stub' ];
+var cssClassBlackList = [ 'noprint', 'ambox', 'stub', 'topicon' ];
 var cssClassCallsBlackList = [ 'plainlinks' ];
 
 /* Article template */
@@ -50,7 +50,7 @@ var templateDoc = domino.createDocument( templateHtml );
 var articleIds = {};
 //articleIds['Syr_Darya'] = undefined;
 //articleIds['Vendôme'] = undefined;
-articleIds['Angé'] = undefined;
+articleIds['Gaza'] = undefined;
 
 //articleIds['Linux'] = undefined;
 var parsoidUrl = 'http://parsoid.wmflabs.org/en/';
