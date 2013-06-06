@@ -8,7 +8,6 @@ var domino = require('domino');
 var urlParser = require('url');
 var pathParser = require('path');
 var http = require('follow-redirects').http;
-var querystring = require('querystring');
 
 /* Global variables */
 var directory = 'static/';
@@ -48,7 +47,9 @@ var templateDoc = domino.createDocument( templateHtml );
 
 /* Input variables */
 var articleIds = {};
-articleIds['Kiwix'] = undefined;
+articleIds['Vendôme'] = undefined;
+articleIds['Angé'] = undefined;
+
 //articleIds['Linux'] = undefined;
 var parsoidUrl = 'http://parsoid.wmflabs.org/en/';
 var webUrl = 'http://en.wikipedia.org/wiki/';
@@ -63,7 +64,7 @@ Object.keys(articleIds).map( function( articleId ) {
     var articleUrl = parsoidUrl + articleId ;
     console.info( 'Downloading article from ' + articleUrl + '...' );
     request( articleUrl, function( error, response, body ) {
-	saveArticle( articleId, body );
+	saveArticle( articleId, body.toString("utf8") );
     });
 });
 
@@ -75,8 +76,8 @@ function saveArticle( articleId, html ) {
     var imgs = parsoidDoc.getElementsByTagName( 'img' );
     for ( var i = 0; i < imgs.length ; i++ ) {
 	var img = imgs[i];
-	var src = img.getAttribute( 'src' );
-	var filename = querystring.unescape( pathParser.basename( urlParser.parse( src ).pathname ) );
+	var src = getFullUrl( img.getAttribute( 'src' ) );
+	var filename = decodeURIComponent( pathParser.basename( urlParser.parse( src ).pathname ) );
 
 	/* Download image */
 	downloadFile(src, directory + filename );
@@ -109,7 +110,7 @@ function saveArticle( articleId, html ) {
 	   /* Remove internal links pointing to no mirrored articles */
 	    else if ( rel.substring( 0, 11 ) === 'mw:WikiLink' ) {
 		var targetId = a.getAttribute( 'href' );;
-		targetId = querystring.unescape( a.getAttribute( 'href' ).replace(/^\.\//, '') );
+		targetId = decodeURIComponent( a.getAttribute( 'href' ).replace(/^\.\//, '') );
 
 		if ( ! ( targetId in articleIds ) ) {
 		    while ( a.firstChild ) {
