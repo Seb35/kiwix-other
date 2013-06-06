@@ -20,6 +20,7 @@ var javascriptPath = javascriptDirectory + 'tools.js';
 var withCategories = false;
 var withMedias = true;
 var cssClassBlackList = [ 'noprint', 'ambox', 'stub' ];
+var cssClassCallsBlackList = [ 'plainlinks' ];
 
 /* Article template */
 var templateHtml = function(){/*
@@ -197,6 +198,13 @@ function saveArticle( articleId, html ) {
 	if ( node.getAttribute( 'rel' ) && node.getAttribute( 'rel' ).substr( 0, 3 ) === 'mw:' ) {
 	    node.removeAttribute( 'rel' );
 	}
+
+	/* Remove a few css calls */
+	cssClassCallsBlackList.map( function( classname )  {
+	    if ( node.getAttribute( 'class' ) ) {
+		node.setAttribute( 'class', node.getAttribute( 'class' ).replace( classname, '' ) );
+	    }
+	});
     }
 
     /* Write the static html file */
