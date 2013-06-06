@@ -18,6 +18,8 @@ var mediaDirectory = directory + 'media/';
 var javascriptDirectory = directory + 'js/';
 var stylePath = styleDirectory + 'style.css';
 var javascriptPath = javascriptDirectory + 'tools.js';
+var withCategories = false;
+var withMedias = true;
 
 /* Article template */
 var templateHtml = function(){/*
@@ -44,8 +46,9 @@ var templateHtml = function(){/*
 var templateDoc = domino.createDocument( templateHtml );
 
 /* Input variables */
-//var articleIds = [ 'Kiwix', 'Paris', 'France' ];
-var articleIds = [ 'Kiwix' ];
+var articleIds = {};
+articleIds['Kiwix'] = undefined;
+articleIds['Linux'] = undefined;
 var parsoidUrl = 'http://parsoid.wmflabs.org/en/';
 var webUrl = 'http://en.wikipedia.org/wiki/';
 
@@ -55,7 +58,7 @@ saveStylesheet();
 saveJavascript();
 
 /* Save articles */
-articleIds.map( function( articleId ) {
+Object.keys(articleIds).map( function( articleId ) {
     var articleUrl = parsoidUrl + articleId ;
     console.info( 'Downloading article from ' + articleUrl + '...' );
     request( articleUrl, function( error, response, body ) {
@@ -64,7 +67,7 @@ articleIds.map( function( articleId ) {
 });
 
 function saveArticle( articleId, html ) {
-    console.info( 'Parsing HTML/RDF...' );
+    console.info( 'Parsing HTML/RDF of ' + articleId + '...' );
     var parsoidDoc = domino.createDocument( html );
     
     /* Go through all images */
@@ -85,8 +88,8 @@ function saveArticle( articleId, html ) {
 
 	/* Remove image link */
 	var linkNode = img.parentNode
-	if (linkNode.tagName === 'A' ) {
-	    linkNode.parentNode.replaceChild(img, linkNode);
+	if ( linkNode.tagName === 'A' ) {
+	    linkNode.parentNode.replaceChild( img, linkNode );
 	}
     }
 
@@ -96,8 +99,24 @@ function saveArticle( articleId, html ) {
 	var a = as[i];
 	var rel = a.getAttribute( 'rel' );
 	
-	if ( rel && rel.substring( 0, 10 ) === 'mw:ExtLink' || rel === 'mw:WikiLink/Interwiki' ) {
-	    a.setAttribute( 'class', concatenateToAttribute( a.getAttribute( 'class'), 'external' ) );
+	if ( rel ) {
+	    /* Add 'external' class to external links */
+	    if ( rel.substring( 0, 10 ) === 'mw:ExtLink' || rel === 'mw:WikiLink/Interwiki' ) {
+		a.setAttribute( 'class', concatenateToAttribute( a.getAttribute( 'class'), 'external' ) );
+	    }
+
+	   /* Remove internal links pointing to no mirrored articles */
+	    else if ( rel.substring( 0, 11 ) === 'mw:WikiLink' ) {
+		var targetId = a.getAttribute( 'href' );;
+		targetId = querystring.unescape( a.getAttribute( 'href' ).replace(/^\.\//, '') );
+
+		if ( ! ( targetId in articleIds ) ) {
+		    while ( a.firstChild ) {
+			a.parentNode.insertBefore( a.firstChild, a);
+		    }
+		    a.parentNode.removeChild( a );
+		}
+	    }
 	}
     }
 
