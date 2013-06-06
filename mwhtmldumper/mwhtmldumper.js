@@ -37,7 +37,7 @@ var templateHtml = function(){/*
     <a id="top"></a>
     <h1 id="firstHeading" class="firstHeading" style="margin-bottom: 0.5em; background-color: white;"></h1>
     <div id="bodyContent">
-      <div id="mw-content-text">
+      <div id="mw-content-text" style="padding-top: 1em;">
       </div>
     </div>
   </div>
@@ -48,7 +48,8 @@ var templateDoc = domino.createDocument( templateHtml );
 
 /* Input variables */
 var articleIds = {};
-articleIds['Vendôme'] = undefined;
+//articleIds['Syr_Darya'] = undefined;
+//articleIds['Vendôme'] = undefined;
 articleIds['Angé'] = undefined;
 
 //articleIds['Linux'] = undefined;
@@ -101,17 +102,29 @@ function saveArticle( articleId, html ) {
     for ( var i = 0; i < as.length ; i++ ) {
 	var a = as[i];
 	var rel = a.getAttribute( 'rel' );
-	
+	var href = a.getAttribute( 'href' );
+
 	if ( rel ) {
 	    /* Add 'external' class to external links */
 	    if ( rel.substring( 0, 10 ) === 'mw:ExtLink' || rel === 'mw:WikiLink/Interwiki' ) {
 		a.setAttribute( 'class', concatenateToAttribute( a.getAttribute( 'class'), 'external' ) );
 	    }
 
-	   /* Remove internal links pointing to no mirrored articles */
+	    if ( ! href ) {
+		console.log(a.outerHTML);
+		process.exit(1);
+	    }
+
+	    /* Rewrite external links starting with // */
+	    if ( rel.substring( 0, 10 ) === 'mw:ExtLink' ) {
+		if ( href.substring( 0, 1 ) === '/' ) {
+		    a.setAttribute( 'href', getFullUrl( href ) );
+		}
+	    }
+
+	    /* Remove internal links pointing to no mirrored articles */
 	    else if ( rel.substring( 0, 11 ) === 'mw:WikiLink' ) {
-		var targetId = a.getAttribute( 'href' );;
-		targetId = decodeURIComponent( a.getAttribute( 'href' ).replace(/^\.\//, '') );
+		var targetId = decodeURIComponent( href.replace(/^\.\//, '') );
 
 		if ( ! ( targetId in articleIds ) ) {
 		    while ( a.firstChild ) {
