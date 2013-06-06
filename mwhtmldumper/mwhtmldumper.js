@@ -20,6 +20,7 @@ var stylePath = styleDirectory + 'style.css';
 var javascriptPath = javascriptDirectory + 'tools.js';
 var withCategories = false;
 var withMedias = true;
+var cssClassBlackList = [ 'noprint', 'ambox', 'stub' ];
 
 /* Article template */
 var templateHtml = function(){/*
@@ -48,7 +49,7 @@ var templateDoc = domino.createDocument( templateHtml );
 /* Input variables */
 var articleIds = {};
 articleIds['Kiwix'] = undefined;
-articleIds['Linux'] = undefined;
+//articleIds['Linux'] = undefined;
 var parsoidUrl = 'http://parsoid.wmflabs.org/en/';
 var webUrl = 'http://en.wikipedia.org/wiki/';
 
@@ -166,12 +167,13 @@ function saveArticle( articleId, html ) {
 	figure.parentNode.replaceChild(thumbDiv, figure);
     }
 
-    /* Remove noprint css elements */
-    var noprintNodes = parsoidDoc.getElementsByClassName( 'noprint' );
-    for ( var i = 0; i < noprintNodes.length ; i++ ) {
-	var node = noprintNodes[i];
-	deleteNode( node );
-    }
+    /* Remove element with black listed CSS classes */
+    cssClassBlackList.map( function( classname ) {
+	var nodes = parsoidDoc.getElementsByClassName( classname );
+	for ( var i = 0; i < nodes.length ; i++ ) {
+	    deleteNode( nodes[i] );
+	}
+    });
 
     /* Create final document by merging template and parsoid documents */
     var doc = templateDoc;
