@@ -20,6 +20,7 @@ var javascriptPath = javascriptDirectory + 'tools.js';
 var withCategories = false;
 var withMedias = true;
 var cssClassBlackList = [ 'noprint', 'ambox', 'stub', 'topicon', 'magnify' ];
+var cssClassBlackListIfNoLink = [ 'mainarticle' ];
 var cssClassCallsBlackList = [ 'plainlinks' ];
 var ltr = true;
 
@@ -54,7 +55,7 @@ var templateDoc = domino.createDocument( templateHtml );
 /* Input variables */
 var articleIds = {};
 //articleIds['Syr_Darya'] = undefined;
-//articleIds['Vendôme'] = undefined;
+articleIds['History_of_Paris'] = undefined;
 articleIds['Paris'] = undefined;
 
 //articleIds['Linux'] = undefined;
@@ -183,7 +184,7 @@ function saveArticle( articleId, html ) {
 
 	var thumbcaptionDiv = parsoidDoc.createElement( 'div' );
 	thumbcaptionDiv.setAttribute( 'class', 'thumbcaption' );
-	thumbcaptionDiv.setAttribute( 'style', 'text-align: left' );
+	thumbcaptionDiv.setAttribute( 'style', 'text-align: ' + autoAlign );
 	if ( description ) {
 	    thumbcaptionDiv.innerHTML = description.innerHTML
 	}
@@ -200,6 +201,16 @@ function saveArticle( articleId, html ) {
 	var nodes = parsoidDoc.getElementsByClassName( classname );
 	for ( var i = 0; i < nodes.length ; i++ ) {
 	    deleteNode( nodes[i] );
+	}
+    });
+
+    /* Remove element with black listed CSS classes and no link */
+    cssClassBlackListIfNoLink.map( function( classname ) {
+	var nodes = parsoidDoc.getElementsByClassName( classname );
+	for ( var i = 0; i < nodes.length ; i++ ) {
+	    if ( nodes[i].getElementsByTagName( 'a' ).length === 0 ) {
+		deleteNode(nodes[i]);
+	    }
 	}
     });
 
