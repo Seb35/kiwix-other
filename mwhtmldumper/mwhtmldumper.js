@@ -20,7 +20,7 @@ var javascriptPath = javascriptDirectory + 'tools.js';
 var withCategories = false;
 var withMedias = true;
 var cssClassBlackList = [ 'noprint', 'ambox', 'stub', 'topicon', 'magnify' ];
-var cssClassBlackListIfNoLink = [ 'mainarticle' ];
+var cssClassBlackListIfNoLink = [ 'mainarticle', 'seealso', 'dablink' ];
 var cssClassCallsBlackList = [ 'plainlinks' ];
 var ltr = true;
 
@@ -54,9 +54,7 @@ var templateDoc = domino.createDocument( templateHtml );
 
 /* Input variables */
 var articleIds = {};
-//articleIds['Syr_Darya'] = undefined;
-articleIds['History_of_Paris'] = undefined;
-articleIds['Paris'] = undefined;
+articleIds['France'] = undefined;
 
 //articleIds['Linux'] = undefined;
 var parsoidUrl = 'http://parsoid.wmflabs.org/en/';
@@ -158,42 +156,49 @@ function saveArticle( articleId, html ) {
 	}
     }
 
+    /* Rewrite galleries */
+
+
     /* Rewrite thumbnails */
     var figures = parsoidDoc.getElementsByTagName( 'figure' );
     for ( var i = 0; i < figures.length ; i++ ) {
 	var figure = figures[i];
 	var figureClass = figure.getAttribute( 'class' ) || '';
-	var image = figure.getElementsByTagName( 'img' )[0];
-	var imageWidth = parseInt( image.getAttribute( 'width' ) );
-	var description = figure.getElementsByTagName( 'figcaption' )[0];
+	var figureTypeof = figure.getAttribute( 'typeof' );
 
-	var thumbDiv = parsoidDoc.createElement( 'div' );
-	thumbDiv.setAttribute
-	thumbDiv.setAttribute( 'class', 'thumb' );
-	if ( figureClass.search( 'mw-halign-right' ) >= 0 ) {
-	    thumbDiv.setAttribute( 'class', concatenateToAttribute( thumbDiv.getAttribute( 'class' ), 'tright' ) );
-	} else if ( figureClass.search( 'mw-halign-left' ) >= 0 ) {
-	    thumbDiv.setAttribute( 'class', concatenateToAttribute( thumbDiv.getAttribute( 'class' ), 'tleft' ) );
-	} else {
-	    thumbDiv.setAttribute( 'class', concatenateToAttribute( thumbDiv.getAttribute( 'class' ), 't' + revAutoAlign ) );
+	if ( figureTypeof === 'mw:Image/Thumb' ) {
+	    var image = figure.getElementsByTagName( 'img' )[0];
+	    var imageWidth = parseInt( image.getAttribute( 'width' ) );
+	    var description = figure.getElementsByTagName( 'figcaption' )[0];
+	    
+	    var thumbDiv = parsoidDoc.createElement( 'div' );
+	    thumbDiv.setAttribute
+	    thumbDiv.setAttribute( 'class', 'thumb' );
+	    if ( figureClass.search( 'mw-halign-right' ) >= 0 ) {
+		thumbDiv.setAttribute( 'class', concatenateToAttribute( thumbDiv.getAttribute( 'class' ), 'tright' ) );
+	    } else if ( figureClass.search( 'mw-halign-left' ) >= 0 ) {
+		thumbDiv.setAttribute( 'class', concatenateToAttribute( thumbDiv.getAttribute( 'class' ), 'tleft' ) );
+	    } else {
+		thumbDiv.setAttribute( 'class', concatenateToAttribute( thumbDiv.getAttribute( 'class' ), 't' + revAutoAlign ) );
+	    }
+	    
+	    var thumbinnerDiv = parsoidDoc.createElement( 'div' );
+	    thumbinnerDiv.setAttribute( 'class', 'thumbinner' );
+	    thumbinnerDiv.setAttribute( 'style', 'width:' + ( imageWidth + 2) + 'px' );
+	    
+	    var thumbcaptionDiv = parsoidDoc.createElement( 'div' );
+	    thumbcaptionDiv.setAttribute( 'class', 'thumbcaption' );
+	    thumbcaptionDiv.setAttribute( 'style', 'text-align: ' + autoAlign );
+	    if ( description ) {
+		thumbcaptionDiv.innerHTML = description.innerHTML
+	    }
+	    
+	    thumbinnerDiv.appendChild( image );
+	    thumbinnerDiv.appendChild( thumbcaptionDiv );
+	    thumbDiv.appendChild( thumbinnerDiv );
+	    
+	    figure.parentNode.replaceChild(thumbDiv, figure);
 	}
-
-	var thumbinnerDiv = parsoidDoc.createElement( 'div' );
-	thumbinnerDiv.setAttribute( 'class', 'thumbinner' );
-	thumbinnerDiv.setAttribute( 'style', 'width:' + ( imageWidth + 2) + 'px' );
-
-	var thumbcaptionDiv = parsoidDoc.createElement( 'div' );
-	thumbcaptionDiv.setAttribute( 'class', 'thumbcaption' );
-	thumbcaptionDiv.setAttribute( 'style', 'text-align: ' + autoAlign );
-	if ( description ) {
-	    thumbcaptionDiv.innerHTML = description.innerHTML
-	}
-
-	thumbinnerDiv.appendChild( image );
-	thumbinnerDiv.appendChild( thumbcaptionDiv );
-	thumbDiv.appendChild( thumbinnerDiv );
-
-	figure.parentNode.replaceChild(thumbDiv, figure);
     }
 
     /* Remove element with black listed CSS classes */
