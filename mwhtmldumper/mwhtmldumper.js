@@ -54,23 +54,31 @@ var templateDoc = domino.createDocument( templateHtml );
 
 /* Input variables */
 var articleIds = {};
-articleIds['France'] = undefined;
+articleIds['Paris'] = undefined;
+
+var redirectIds = {};
 
 //articleIds['Linux'] = undefined;
 var parsoidUrl = 'http://parsoid.wmflabs.org/en/';
 var webUrl = 'http://en.wikipedia.org/wiki/';
+var apiUrl = 'http://en.wikipedia.org/w/api.php?';
 
 /* Initialization */
 createDirectories();
 saveStylesheet();
 saveJavascript();
 
+/* Retrieve the redirects */
+Object.keys(articleIds).map( function( articleId ) {
+    saveRedirects( articleId );
+});
+
 /* Save articles */
 Object.keys(articleIds).map( function( articleId ) {
     var articleUrl = parsoidUrl + articleId ;
     console.info( 'Downloading article from ' + articleUrl + '...' );
     request( articleUrl, function( error, response, body ) {
-	saveArticle( articleId, body.toString("utf8") );
+	saveArticle( articleId, body );
     });
 });
 
@@ -130,7 +138,7 @@ function saveArticle( articleId, html ) {
 	    else if ( rel.substring( 0, 11 ) === 'mw:WikiLink' ) {
 		var targetId = decodeURIComponent( href.replace(/^\.\//, '') );
 
-		if ( ! ( targetId in articleIds ) ) {
+		if ( ! ( targetId in articleIds && targetId in redirectIds ) ) {
 		    while ( a.firstChild ) {
 			a.parentNode.insertBefore( a.firstChild, a);
 		    }
@@ -155,9 +163,6 @@ function saveArticle( articleId, html ) {
 	    }
 	}
     }
-
-    /* Rewrite galleries */
-
 
     /* Rewrite thumbnails */
     var figures = parsoidDoc.getElementsByTagName( 'figure' );
@@ -325,6 +330,24 @@ function saveStylesheet() {
 		});
 	    }
 	}
+    });
+}
+
+/* Save redirects */
+function saveRedirects( articleId ) {
+    getRedirects( articleId );
+}
+
+/* Get the redirects to an article */
+function getRedirects( articleId ) {
+    console.info( 'Downloading redirects to ' + articleId + '...' );
+    var url = apiUrl + 'action=query&list=backlinks&blfilterredir=redirects&bllimit=500&format=json&bltitle=' + 
+	decodeURIComponent( articleId );
+    request( url, function( error, response, body ) {
+	var redirects = JSON.parse( body )['query']['backlinks'];
+	redirects.map( function( redirect ) {
+	    redirectIds[redirect['title'].replace( / /g,'_' )] = undefined;
+	});
     });
 }
 
