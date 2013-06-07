@@ -56,7 +56,7 @@ var templateDoc = domino.createDocument( templateHtml );
 
 /* Input variables */
 var articleIds = {};
-articleIds['Main_Page'] = undefined;
+articleIds['Murder_of_James_Byrd,_Jr.'] = undefined;
 
 var redirectIds = {};
 
@@ -161,6 +161,7 @@ function saveArticle( articleId, html ) {
 	if ( rel === 'dc:references' ) {
 	    var sup = parsoidDoc.createElement( 'sup' );
 	    if ( span.innerHTML ) {
+		sup.id = span.id;
 		sup.innerHTML = span.innerHTML;
 		span.parentNode.replaceChild(sup, span);
 	    } else {
