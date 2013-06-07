@@ -44,6 +44,7 @@ var templateHtml = function(){/*
   <div id="content" style="margin: 0px; border-width: 0px;">
     <a id="top"></a>
     <h1 id="firstHeading" class="firstHeading" style="margin-bottom: 0.5em; background-color: white;"></h1>
+    <div style="font-size: smaller; margin-top: -1em;">From Wikipedia, the free encyclopedia</div>
     <div id="bodyContent">
       <div id="mw-content-text" style="padding-top: 1em;">
       </div>
@@ -56,7 +57,8 @@ var templateDoc = domino.createDocument( templateHtml );
 
 /* Input variables */
 var articleIds = {};
-articleIds['Murder_of_James_Byrd,_Jr.'] = undefined;
+articleIds['Vendôme'] = undefined;
+articleIds['Angé'] = undefined;
 
 var redirectIds = {};
 
@@ -143,7 +145,7 @@ function saveArticle( articleId, html ) {
 	    else if ( rel.substring( 0, 11 ) === 'mw:WikiLink' ) {
 		var targetId = decodeURIComponent( href.replace(/^\.\//, '') );
 
-		if ( ! ( targetId in articleIds && targetId in redirectIds ) ) {
+		if ( ! ( targetId in articleIds || targetId in redirectIds ) ) {
 		    while ( a.firstChild ) {
 			a.parentNode.insertBefore( a.firstChild, a);
 		    }
