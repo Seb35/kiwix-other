@@ -23,6 +23,7 @@ var withMedias = true;
 var cssClassBlackList = [ 'noprint', 'ambox', 'stub', 'topicon', 'magnify' ];
 var cssClassBlackListIfNoLink = [ 'mainarticle', 'seealso', 'dablink' ];
 var cssClassCallsBlackList = [ 'plainlinks' ];
+var idBlackList = [ 'purgelink' ];
 var ltr = true;
 
 /* alignements */
@@ -55,7 +56,7 @@ var templateDoc = domino.createDocument( templateHtml );
 
 /* Input variables */
 var articleIds = {};
-articleIds['Kiwix'] = undefined;
+articleIds['Main_Page'] = undefined;
 
 var redirectIds = {};
 
@@ -209,6 +210,14 @@ function saveArticle( articleId, html ) {
 	    figure.parentNode.replaceChild(thumbDiv, figure);
 	}
     }
+
+    /* Remove element with id in the blacklist */
+    idBlackList.map( function( id ) {
+	var node = parsoidDoc.getElementById( id );
+	if (node) {
+	    deleteNode( node );
+	}
+    });
 
     /* Remove element with black listed CSS classes */
     cssClassBlackList.map( function( classname ) {
