@@ -8,6 +8,7 @@ var domino = require('domino');
 var urlParser = require('url');
 var pathParser = require('path');
 var http = require('follow-redirects').http;
+var swig = require('swig');
 
 /* Global variables */
 var directory = 'static/';
@@ -54,7 +55,7 @@ var templateDoc = domino.createDocument( templateHtml );
 
 /* Input variables */
 var articleIds = {};
-articleIds['Paris'] = undefined;
+articleIds['Angé'] = undefined;
 
 var redirectIds = {};
 
@@ -62,6 +63,9 @@ var redirectIds = {};
 var parsoidUrl = 'http://parsoid.wmflabs.org/en/';
 var webUrl = 'http://en.wikipedia.org/wiki/';
 var apiUrl = 'http://en.wikipedia.org/w/api.php?';
+
+/* Footer */
+var footerTemplateCode = '<div style="background-image:linear-gradient(180deg, #E8E8E8, white); border-top: dashed 2px #AAAAAA; padding: 0.5em 0.5em 2em 0.5em; margin-top: 1em;">Diese Seite kommt von <a class="external text" href="{{ webUrl }}{{ articleId }}">Wikipedia</a>. Der Text ist unter der Lizenz „<a class="external text" href="https://de.wikipedia.org/wiki/Wikipedia:Lizenzbestimmungen_Commons_Attribution-ShareAlike_3.0_Unported">Creative Commons Attribution/Share Alike</a>“ verfügbar; zusätzliche Bedingungen können anwendbar sein. Einzelheiten sind in den Nutzungsbedingungen beschrieben.</div>';
 
 /* Initialization */
 createDirectories();
@@ -254,6 +258,9 @@ function saveArticle( articleId, html ) {
 	});
     }
 
+    /* Append footer node */
+    doc.getElementById( 'mw-content-text' ).appendChild( getFooterNode( doc, articleId ) );
+
     /* Write the static html file */
     writeFile( doc.documentElement.outerHTML, directory + articleId + '.html' );
 }
@@ -379,6 +386,14 @@ function deleteNode( node ) {
 
 function concatenateToAttribute( old, add ) {
     return old ? old + ' ' + add : add;
+}
+
+function getFooterNode( doc, articleId ) {
+    var escapedArticleId = encodeURIComponent( articleId );
+    var div = doc.createElement('div');
+    var tpl = swig.compile( footerTemplateCode );
+    div.innerHTML = tpl({ articleId: escapedArticleId, webUrl: webUrl });
+    return div;
 }
 
 function writeFile( data, path ) {
