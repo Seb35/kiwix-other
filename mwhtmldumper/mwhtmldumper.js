@@ -19,7 +19,7 @@ var stylePath = styleDirectory + 'style.css';
 var javascriptPath = javascriptDirectory + 'tools.js';
 var withCategories = false;
 var withMedias = true;
-var cssClassBlackList = [ 'noprint', 'ambox', 'stub', 'topicon' ];
+var cssClassBlackList = [ 'noprint', 'ambox', 'stub', 'topicon', 'magnify' ];
 var cssClassCallsBlackList = [ 'plainlinks' ];
 var ltr = true;
 
@@ -55,7 +55,7 @@ var templateDoc = domino.createDocument( templateHtml );
 var articleIds = {};
 //articleIds['Syr_Darya'] = undefined;
 //articleIds['Vendôme'] = undefined;
-articleIds['New York Fashion Week'] = undefined;
+articleIds['Paris'] = undefined;
 
 //articleIds['Linux'] = undefined;
 var parsoidUrl = 'http://parsoid.wmflabs.org/en/';
@@ -161,7 +161,7 @@ function saveArticle( articleId, html ) {
     var figures = parsoidDoc.getElementsByTagName( 'figure' );
     for ( var i = 0; i < figures.length ; i++ ) {
 	var figure = figures[i];
-	var figureClass = figure.getAttribute( 'class' );
+	var figureClass = figure.getAttribute( 'class' ) || '';
 	var image = figure.getElementsByTagName( 'img' )[0];
 	var imageWidth = parseInt( image.getAttribute( 'width' ) );
 	var description = figure.getElementsByTagName( 'figcaption' )[0];
