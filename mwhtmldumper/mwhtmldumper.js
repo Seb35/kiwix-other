@@ -57,9 +57,7 @@ var templateDoc = domino.createDocument( templateHtml );
 
 /* Input variables */
 var articleIds = {};
-articleIds['user:Kelson'] = undefined;
-
-
+articleIds['Sydney_Harbour_Bridge'] = undefined;
 var redirectIds = {};
 
 //articleIds['Linux'] = undefined;
@@ -430,13 +428,12 @@ function downloadFile( url, path ) {
 }
 
 function createDirectory( path ) {
-    fs.mkdir( path, function( error ) {
-	fs.exists( path, function ( exists ) {
-	    if ( error && ! ( exists && fs.lstatSync( path ).isDirectory() ) ) {
-		console.error( 'Unable to create directory \'' + path + '\'' );
-		process.exit( 1 );
-	    }
-	});
+    fs.mkdirSync( path );
+    fs.exists( path, function ( exists ) {
+	if ( ! ( exists && fs.lstatSync( path ).isDirectory() ) ) {
+	    console.error( 'Unable to create directory \'' + path + '\'' );
+	    process.exit( 1 );
+	}
     });
 }
 
