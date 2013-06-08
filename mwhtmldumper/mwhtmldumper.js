@@ -57,8 +57,8 @@ var templateDoc = domino.createDocument( templateHtml );
 
 /* Input variables */
 var articleIds = {};
-articleIds['Vendôme'] = undefined;
-articleIds['Angé'] = undefined;
+articleIds['user:Kelson'] = undefined;
+
 
 var redirectIds = {};
 
@@ -191,6 +191,8 @@ function saveArticle( articleId, html ) {
 		thumbDiv.setAttribute( 'class', concatenateToAttribute( thumbDiv.getAttribute( 'class' ), 'tright' ) );
 	    } else if ( figureClass.search( 'mw-halign-left' ) >= 0 ) {
 		thumbDiv.setAttribute( 'class', concatenateToAttribute( thumbDiv.getAttribute( 'class' ), 'tleft' ) );
+	    } else if ( figureClass.search( 'mw-halign-center' ) >= 0 ) {
+		thumbDiv.setAttribute( 'class', concatenateToAttribute( thumbDiv.getAttribute( 'class' ), 'tnone center' ) );
 	    } else {
 		thumbDiv.setAttribute( 'class', concatenateToAttribute( thumbDiv.getAttribute( 'class' ), 't' + revAutoAlign ) );
 	    }
