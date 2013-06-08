@@ -9,6 +9,7 @@ var urlParser = require('url');
 var pathParser = require('path');
 var http = require('follow-redirects').http;
 var swig = require('swig');
+var sleep = require('sleep');
 
 /* Global variables */
 var directory = 'static/';
@@ -17,7 +18,6 @@ var htmlDirectory = directory + 'html/';
 var mediaDirectory = directory + 'media/';
 var javascriptDirectory = directory + 'js/';
 var stylePath = styleDirectory + 'style.css';
-var javascriptPath = javascriptDirectory + 'tools.js';
 var withCategories = false;
 var withMedias = true;
 var cssClassBlackList = [ 'noprint', 'ambox', 'stub', 'topicon', 'magnify' ];
@@ -38,7 +38,7 @@ var templateHtml = function(){/*
     <meta charset="UTF-8" />
     <title></title>
     <link rel="stylesheet" href="style/style.css" />
-    <script src="js/tools.js"></script>
+    <script src="js/head.js"></script>
   </head>
 <body class="mediawiki" style="background-color: white;">
   <div id="content" style="margin: 0px; border-width: 0px;">
@@ -50,6 +50,7 @@ var templateHtml = function(){/*
       </div>
     </div>
   </div>
+  <script src="js/body.js"></script>
 </body>
 </html>
 */}.toString().slice(14,-3);
@@ -280,25 +281,32 @@ function saveArticle( articleId, html ) {
 /* Grab and concatenate javascript files */
 function saveJavascript() {
     console.info( 'Creating javascript...' );
-    fs.unlink( javascriptPath, function() {} );
-    request( webUrl, function( error, response, html ) {
-	var doc = domino.createDocument( html );
-	var scripts = doc.getElementsByTagName( 'script' );
-	
-	for ( var i = 0; i < scripts.length ; i++ ) {
-	    var script = scripts[i];
-	    var url = script.getAttribute( 'src' );
+    
+    var nodeNames = [ 'head', 'body' ];
+    nodeNames.map( function( nodeName ) {
+	request( webUrl, function( error, response, html ) {
+	    var doc = domino.createDocument( html );
+	    var node = doc.getElementsByTagName( nodeName )[0];
+	    var scripts = node.getElementsByTagName( 'script' );
+	    var javascriptPath = javascriptDirectory + nodeName + '.js';
+	    var working = false;
 
-	    if ( url ) {
-		url = getFullUrl( url );
-		console.info( 'Downloading javascript from ' + url );
-		request( url , function( error, response, body ) {
-		    fs.appendFile( javascriptPath, '\n' + body + '\n', function (err) {} );
-		});
-	    } else {
-		fs.appendFile( javascriptPath, '\n' + script.innerHTML + '\n', function (err) {} );
+	    fs.unlink( javascriptPath, function() {} );
+	    for ( var i = 0; i < scripts.length ; i++ ) {
+		var script = scripts[i];
+		var url = script.getAttribute( 'src' );
+		
+		if ( url ) {
+		    url = getFullUrl( url );
+		    console.info( 'Downloading javascript from ' + url );
+		    request( url , function( error, response, body ) {
+			fs.appendFile( javascriptPath, '\n' + body + '\n', function (err) {} );
+		    });
+		} else {
+		    fs.appendFile( javascriptPath, '\n' + script.innerHTML + '\n', function (err) {} );
+		}
 	    }
-	}
+	});
     });
 }
 
