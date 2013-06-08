@@ -21,7 +21,7 @@ var javascriptPath = javascriptDirectory + 'tools.js';
 var withCategories = false;
 var withMedias = true;
 var cssClassBlackList = [ 'noprint', 'ambox', 'stub', 'topicon', 'magnify' ];
-var cssClassBlackListIfNoLink = [ 'mainarticle', 'seealso', 'dablink' ];
+var cssClassBlackListIfNoLink = [ 'mainarticle', 'seealso', 'dablink', 'rellink' ];
 var cssClassCallsBlackList = [ 'plainlinks' ];
 var idBlackList = [ 'purgelink' ];
 var ltr = true;
@@ -57,7 +57,7 @@ var templateDoc = domino.createDocument( templateHtml );
 
 /* Input variables */
 var articleIds = {};
-articleIds['Sydney_Harbour_Bridge'] = undefined;
+articleIds['Mayotte'] = undefined;
 var redirectIds = {};
 
 //articleIds['Linux'] = undefined;
