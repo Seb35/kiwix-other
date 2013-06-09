@@ -9,7 +9,7 @@ var urlParser = require('url');
 var pathParser = require('path');
 var http = require('follow-redirects').http;
 var swig = require('swig');
-var sleep = require('sleep');
+var httpsync = require('httpsync');
 
 /* Global variables */
 var directory = 'static/';
@@ -299,9 +299,10 @@ function saveJavascript() {
 		if ( url ) {
 		    url = getFullUrl( url );
 		    console.info( 'Downloading javascript from ' + url );
-		    request( url , function( error, response, body ) {
-			fs.appendFile( javascriptPath, '\n' + body + '\n', function (err) {} );
-		    });
+		    var req = httpsync.get({ url : url });
+		    var res = req.end();
+		    var body = res.data.toString();
+		    fs.appendFile( javascriptPath, '\n' + body + '\n', function (err) {} );
 		} else {
 		    fs.appendFile( javascriptPath, '\n' + script.innerHTML + '\n', function (err) {} );
 		}
@@ -436,12 +437,15 @@ function downloadFile( url, path ) {
 }
 
 function createDirectory( path ) {
-    fs.mkdirSync( path );
-    fs.exists( path, function ( exists ) {
-	if ( ! ( exists && fs.lstatSync( path ).isDirectory() ) ) {
-	    console.error( 'Unable to create directory \'' + path + '\'' );
-	    process.exit( 1 );
-	}
-    });
+    try {
+	fs.mkdirSync( path );
+    } catch ( error ) {
+	fs.exists( path, function ( exists ) {
+	    if ( ! ( exists && fs.lstatSync( path ).isDirectory() ) ) {
+		console.error( 'Unable to create directory \'' + path + '\'' );
+		process.exit( 1 );
+	    }
+	});
+    }
 }
 
