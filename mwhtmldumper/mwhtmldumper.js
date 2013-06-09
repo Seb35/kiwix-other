@@ -10,6 +10,7 @@ var pathParser = require('path');
 var http = require('follow-redirects').http;
 var swig = require('swig');
 var httpsync = require('httpsync');
+var jsdom = require("jsdom");
 
 /* Global variables */
 var directory = 'static/';
@@ -71,8 +72,8 @@ var footerTemplateCode = '<div style="clear:both; background-image:linear-gradie
 
 /* Initialization */
 createDirectories();
-saveStylesheet();
 saveJavascript();
+saveStylesheet();
 
 /* Retrieve the redirects */
 Object.keys(articleIds).map( function( articleId ) {
@@ -282,31 +283,42 @@ function saveArticle( articleId, html ) {
 function saveJavascript() {
     console.info( 'Creating javascript...' );
     
+    jsdom.defaultDocumentFeatures = {
+	FetchExternalResources   : ['script'],
+	ProcessExternalResources : ['script'],
+	MutationEvents           : '2.0',
+	QuerySelector            : false
+    }
+
     var nodeNames = [ 'head', 'body' ];
     nodeNames.map( function( nodeName ) {
 	request( webUrl, function( error, response, html ) {
-	    var doc = domino.createDocument( html );
-	    var node = doc.getElementsByTagName( nodeName )[0];
-	    var scripts = node.getElementsByTagName( 'script' );
-	    var javascriptPath = javascriptDirectory + nodeName + '.js';
-	    var working = false;
-
-	    fs.unlink( javascriptPath, function() {} );
-	    for ( var i = 0; i < scripts.length ; i++ ) {
-		var script = scripts[i];
-		var url = script.getAttribute( 'src' );
+	    var doc = jsdom.jsdom( html );
+	    var window = doc.createWindow();
+	    window.addEventListener('load', function () {
+		var elementsArray = window.document.getElementsByTagName( 'script' );
+		var node = doc.getElementsByTagName( nodeName )[0];
+		var scripts = node.getElementsByTagName( 'script' );
+		var javascriptPath = javascriptDirectory + nodeName + '.js';
+		var working = false;
 		
-		if ( url ) {
-		    url = getFullUrl( url );
-		    console.info( 'Downloading javascript from ' + url );
-		    var req = httpsync.get({ url : url });
-		    var res = req.end();
-		    var body = res.data.toString();
-		    fs.appendFile( javascriptPath, '\n' + body + '\n', function (err) {} );
-		} else {
-		    fs.appendFile( javascriptPath, '\n' + script.innerHTML + '\n', function (err) {} );
+		fs.unlink( javascriptPath, function() {} );
+		for ( var i = 0; i < scripts.length ; i++ ) {
+		    var script = scripts[i];
+		    var url = script.getAttribute( 'src' );
+		    
+		    if ( url ) {
+			url = getFullUrl( url );
+			console.info( 'Downloading javascript from ' + url );
+			var req = httpsync.get({ url : url });
+			var res = req.end();
+			var body = res.data.toString();
+			fs.appendFile( javascriptPath, '\n' + body + '\n', function (err) {} );
+		    } else {
+			fs.appendFile( javascriptPath, '\n' + script.innerHTML + '\n', function (err) {} );
+		    }
 		}
-	    }
+	    });
 	});
     });
 }
