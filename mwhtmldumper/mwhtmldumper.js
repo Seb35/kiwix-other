@@ -11,6 +11,7 @@ var http = require('follow-redirects').http;
 var swig = require('swig');
 var httpsync = require('httpsync');
 var jsdom = require("jsdom");
+var sleep = require("sleep");
 
 /* Global variables */
 var directory = 'static/';
@@ -287,20 +288,16 @@ function saveJavascript() {
 	FetchExternalResources   : ['script'],
 	ProcessExternalResources : ['script'],
 	MutationEvents           : '2.0',
-	QuerySelector            : false
     }
 
-    var nodeNames = [ 'head', 'body' ];
-    nodeNames.map( function( nodeName ) {
-	request( webUrl, function( error, response, html ) {
-	    var doc = jsdom.jsdom( html );
-	    var window = doc.createWindow();
-	    window.addEventListener('load', function () {
-		var elementsArray = window.document.getElementsByTagName( 'script' );
-		var node = doc.getElementsByTagName( nodeName )[0];
+    request( webUrl, function( error, response, html ) {
+	var window = jsdom.jsdom( html ).createWindow();
+	window.addEventListener('load', function () {
+	    var nodeNames = [ 'head', 'body' ];
+	    nodeNames.map( function( nodeName ) {
+		var node = window.document.getElementsByTagName( nodeName )[0];
 		var scripts = node.getElementsByTagName( 'script' );
 		var javascriptPath = javascriptDirectory + nodeName + '.js';
-		var working = false;
 		
 		fs.unlink( javascriptPath, function() {} );
 		for ( var i = 0; i < scripts.length ; i++ ) {
