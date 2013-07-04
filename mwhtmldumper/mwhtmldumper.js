@@ -60,8 +60,7 @@ var templateDoc = domino.createDocument( templateHtml );
 
 /* Input variables */
 var articleIds = {};
-articleIds['Mayotte'] = undefined;
-articleIds['France'] = undefined;
+articleIds['Loir-et-Cher'] = undefined;
 var redirectIds = {};
 
 //articleIds['Linux'] = undefined;
@@ -147,6 +146,17 @@ function saveArticle( articleId, html ) {
 	    else if ( rel.substring( 0, 11 ) === 'mw:WikiLink' ) {
 		var targetId = decodeURIComponent( href.replace(/^\.\//, '') );
 
+		if ( ! ( targetId in articleIds || targetId in redirectIds ) ) {
+		    while ( a.firstChild ) {
+			a.parentNode.insertBefore( a.firstChild, a);
+		    }
+		    a.parentNode.removeChild( a );
+		}
+	    }
+	} else {
+	    if ( href.indexOf( '/wiki/' ) != -1 ) {
+		var targetId = decodeURIComponent( href.replace(/^\/wiki\//, '') );
+		console.info( targetId );
 		if ( ! ( targetId in articleIds || targetId in redirectIds ) ) {
 		    while ( a.firstChild ) {
 			a.parentNode.insertBefore( a.firstChild, a);
