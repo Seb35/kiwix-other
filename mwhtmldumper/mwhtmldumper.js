@@ -61,6 +61,7 @@ var templateDoc = domino.createDocument( templateHtml );
 /* Input variables */
 var articleIds = {};
 articleIds['Mayotte'] = undefined;
+articleIds['France'] = undefined;
 var redirectIds = {};
 
 //articleIds['Linux'] = undefined;
@@ -309,7 +310,8 @@ function saveJavascript() {
 			console.info( 'Downloading javascript from ' + url );
 			var req = httpsync.get({ url : url });
 			var res = req.end();
-			var body = res.data.toString();
+			var body = res.data.toString().replace( '"//', '"http://');
+			
 			fs.appendFile( javascriptPath, '\n' + body + '\n', function (err) {} );
 		    } else {
 			fs.appendFile( javascriptPath, '\n' + script.innerHTML + '\n', function (err) {} );
