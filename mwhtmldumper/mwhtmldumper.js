@@ -11,7 +11,6 @@ var http = require('follow-redirects').http;
 var swig = require('swig');
 var httpsync = require('httpsync');
 var jsdom = require("jsdom");
-var sleep = require("sleep");
 
 /* Global variables */
 var directory = 'static/';
@@ -83,10 +82,15 @@ Object.keys(articleIds).map( function( articleId ) {
 
 /* Save articles */
 Object.keys(articleIds).map( function( articleId ) {
-    var articleUrl = parsoidUrl + articleId ;
+    var articleUrl = parsoidUrl + articleId;
     console.info( 'Downloading article from ' + articleUrl + '...' );
     request( articleUrl, function( error, response, body ) {
-	saveArticle( articleId, body );
+	if ( error ) {
+	    console.error( "Unable to retrieve '" + articleId + "'");
+	    process.exit(1);
+	} else {
+	    saveArticle( articleId, body );
+	}
     });
 });
 
@@ -302,13 +306,20 @@ function saveJavascript() {
     }
 
     request( webUrl, function( error, response, html ) {
+	html = html.replace( '<head>', '<head><base href="http://en.wikipedia.org/" />');
 	var window = jsdom.jsdom( html ).createWindow();
+
+	setTimeout( function() {
+	    console.log("++++++++" + window.document.getElementsByTagName( 'script' ).length);
+	}, 5000);
+
 	window.addEventListener('load', function () {
 	    var nodeNames = [ 'head', 'body' ];
 	    nodeNames.map( function( nodeName ) {
 		var node = window.document.getElementsByTagName( nodeName )[0];
 		var scripts = node.getElementsByTagName( 'script' );
 		var javascriptPath = javascriptDirectory + nodeName + '.js';
+		console.log("---------" + scripts.length);
 		
 		fs.unlink( javascriptPath, function() {} );
 		for ( var i = 0; i < scripts.length ; i++ ) {
@@ -330,6 +341,7 @@ function saveJavascript() {
 	    });
 	});
     });
+
 }
 
 /* Grab and concatenate stylesheet files */
@@ -469,4 +481,3 @@ function createDirectory( path ) {
 	});
     }
 }
-
