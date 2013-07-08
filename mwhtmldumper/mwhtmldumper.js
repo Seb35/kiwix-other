@@ -11,6 +11,7 @@ var http = require('follow-redirects').http;
 var swig = require('swig');
 var httpsync = require('httpsync');
 var jsdom = require("jsdom");
+var sleep = require("sleep");
 
 /* Global variables */
 var directory = 'static/';
@@ -59,40 +60,43 @@ var templateDoc = domino.createDocument( templateHtml );
 
 /* Input variables */
 var articleIds = {};
-articleIds['Loir-et-Cher'] = undefined;
 var redirectIds = {};
 
 //articleIds['Linux'] = undefined;
-var parsoidUrl = 'http://parsoid.wmflabs.org/en/';
-var webUrl = 'http://en.wikipedia.org/wiki/';
-var apiUrl = 'http://en.wikipedia.org/w/api.php?';
+var parsoidUrl = 'http://parsoid.wmflabs.org/bm/';
+var hostUrl = 'http://bm.wikipedia.org/';
+var webUrl = hostUrl + 'wiki/';
+var apiUrl = hostUrl + 'w/api.php?';
 
 /* Footer */
 var footerTemplateCode = '<div style="clear:both; background-image:linear-gradient(180deg, #E8E8E8, white); border-top: dashed 2px #AAAAAA; padding: 0.5em 0.5em 2em 0.5em; margin-top: 1em;">Diese Seite kommt von <a class="external text" href="{{ webUrl }}{{ articleId }}">Wikipedia</a>. Der Text ist unter der Lizenz „<a class="external text" href="https://de.wikipedia.org/wiki/Wikipedia:Lizenzbestimmungen_Commons_Attribution-ShareAlike_3.0_Unported">Creative Commons Attribution/Share Alike</a>“ verfügbar; zusätzliche Bedingungen können anwendbar sein. Einzelheiten sind in den Nutzungsbedingungen beschrieben.</div>';
+
+/* Retrieve the article and redirect Ids */
+getAllIds();
 
 /* Initialization */
 createDirectories();
 saveJavascript();
 saveStylesheet();
 
-/* Retrieve the redirects */
-Object.keys(articleIds).map( function( articleId ) {
-    saveRedirects( articleId );
-});
+/* Save to the disk */
+saveArticles();
 
 /* Save articles */
-Object.keys(articleIds).map( function( articleId ) {
-    var articleUrl = parsoidUrl + articleId;
-    console.info( 'Downloading article from ' + articleUrl + '...' );
-    request( articleUrl, function( error, response, body ) {
-	if ( error ) {
-	    console.error( "Unable to retrieve '" + articleId + "'");
-	    process.exit(1);
-	} else {
-	    saveArticle( articleId, body );
-	}
+function saveArticles() {
+    Object.keys(articleIds).map( function( articleId ) {
+	var articleUrl = parsoidUrl + articleId;
+	console.info( 'Downloading article from ' + articleUrl + '...' );
+	request( articleUrl, function( error, response, body ) {
+	    if ( error ) {
+		console.error( "Unable to retrieve '" + articleId + "'");
+		process.exit(1);
+	    } else {
+		saveArticle( articleId, body );
+	    }
+	});
     });
-});
+}
 
 function saveArticle( articleId, html ) {
     console.info( 'Parsing HTML/RDF of ' + articleId + '...' );
@@ -194,10 +198,10 @@ function saveArticle( articleId, html ) {
 	var figure = figures[i];
 	var figureClass = figure.getAttribute( 'class' ) || '';
 	var figureTypeof = figure.getAttribute( 'typeof' );
+	var image = figure.getElementsByTagName( 'img' )[0];
+	var imageWidth = parseInt( image.getAttribute( 'width' ) );
 
 	if ( figureTypeof === 'mw:Image/Thumb' ) {
-	    var image = figure.getElementsByTagName( 'img' )[0];
-	    var imageWidth = parseInt( image.getAttribute( 'width' ) );
 	    var description = figure.getElementsByTagName( 'figcaption' )[0];
 	    
 	    var thumbDiv = parsoidDoc.createElement( 'div' );
@@ -229,6 +233,19 @@ function saveArticle( articleId, html ) {
 	    thumbDiv.appendChild( thumbinnerDiv );
 	    
 	    figure.parentNode.replaceChild(thumbDiv, figure);
+	} else if ( figureTypeof === 'mw:Image' ) {
+	    var div = parsoidDoc.createElement( 'div' );
+	    if ( figureClass.search( 'mw-halign-right' ) >= 0 ) {
+		div.setAttribute( 'class', concatenateToAttribute( div.getAttribute( 'class' ), 'floatright' ) );
+	    } else if ( figureClass.search( 'mw-halign-left' ) >= 0 ) {
+		div.setAttribute( 'class', concatenateToAttribute( div.getAttribute( 'class' ), 'floatleft' ) );
+	    } else if ( figureClass.search( 'mw-halign-center' ) >= 0 ) {
+		div.setAttribute( 'class', concatenateToAttribute( div.getAttribute( 'class' ), ' center' ) );
+	    } else {
+		div.setAttribute( 'class', concatenateToAttribute( div.getAttribute( 'class' ), 'float' + revAutoAlign ) );
+	    }
+	    div.appendChild( image );
+	    figure.parentNode.replaceChild(div, figure);
 	}
     }
 
@@ -292,7 +309,7 @@ function saveArticle( articleId, html ) {
     doc.getElementById( 'mw-content-text' ).appendChild( getFooterNode( doc, articleId ) );
 
     /* Write the static html file */
-    writeFile( doc.documentElement.outerHTML, directory + articleId + '.html' );
+    writeFile( doc.documentElement.outerHTML, directory + articleId );
 }
 
 /* Grab and concatenate javascript files */
@@ -306,7 +323,7 @@ function saveJavascript() {
     }
 
     request( webUrl, function( error, response, html ) {
-	html = html.replace( '<head>', '<head><base href="http://en.wikipedia.org/" />');
+	html = html.replace( '<head>', '<head><base href="' + hostUrl + '" />');
 	var window = jsdom.jsdom( html ).createWindow();
 
 	setTimeout( function() {
@@ -394,20 +411,44 @@ function saveStylesheet() {
     });
 }
 
-/* Save redirects */
-function saveRedirects( articleId ) {
-    getRedirects( articleId );
+/* Get ids */
+function getAllIds() {
+    console.info( 'Getting all article and redirect ids...' );
+    var next = "";
+    var url = undefined;
+    var filters = [ 'nonredirects', 'redirects' ];
+    filters.map( function( filter ) {
+	do {
+	    url = apiUrl + 'action=query&list=allpages&aplimit=500&apnamespace=0&apfilterredir=' + filter + '&format=json&apcontinue=' + next;
+	    var req = httpsync.get({ url : url });
+	    var res = req.end();
+	    var body = res.data.toString();
+	    var entries = JSON.parse( body )['query']['allpages'];
+	    entries.map( function( entry ) {
+		switch ( filter ) {
+		case 'nonredirects':
+		    articleIds[entry['title'].replace( / /g, '_' )] = undefined;
+		    break;
+		case 'redirects':
+		    redirectIds[entry['title'].replace( / /g, '_' )] = undefined;
+		    break;
+		}
+	    });
+	    next = JSON.parse( body )['query-continue'] ? JSON.parse( body )['query-continue']['allpages']['apcontinue'] : undefined;
+	} while ( next );
+    });
 }
 
-/* Get the redirects to an article */
-function getRedirects( articleId ) {
-    console.info( 'Downloading redirects to ' + articleId + '...' );
-    var url = apiUrl + 'action=query&list=backlinks&blfilterredir=redirects&bllimit=500&format=json&bltitle=' + 
-	decodeURIComponent( articleId );
-    request( url, function( error, response, body ) {
-	var redirects = JSON.parse( body )['query']['backlinks'];
-	redirects.map( function( redirect ) {
-	    redirectIds[redirect['title'].replace( / /g,'_' )] = undefined;
+function getRedirectIds() {
+    console.info( 'Getting redirect for all articles...' );
+    Object.keys(articleIds).map( function( articleId ) {
+	var url = apiUrl + 'action=query&list=backlinks&blfilterredir=redirects&bllimit=500&format=json&bltitle=' + 
+	    decodeURIComponent( articleId );
+	request( url, function( error, response, body ) {
+	    var redirects = JSON.parse( body )['query']['backlinks'];
+	    redirects.map( function( redirect ) {
+		redirectIds[redirect['title'].replace( / /g, '_' )] = undefined;
+	    });
 	});
     });
 }
