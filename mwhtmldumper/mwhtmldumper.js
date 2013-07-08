@@ -72,7 +72,8 @@ var apiUrl = hostUrl + 'w/api.php?';
 var footerTemplateCode = '<div style="clear:both; background-image:linear-gradient(180deg, #E8E8E8, white); border-top: dashed 2px #AAAAAA; padding: 0.5em 0.5em 2em 0.5em; margin-top: 1em;">Diese Seite kommt von <a class="external text" href="{{ webUrl }}{{ articleId }}">Wikipedia</a>. Der Text ist unter der Lizenz „<a class="external text" href="https://de.wikipedia.org/wiki/Wikipedia:Lizenzbestimmungen_Commons_Attribution-ShareAlike_3.0_Unported">Creative Commons Attribution/Share Alike</a>“ verfügbar; zusätzliche Bedingungen können anwendbar sein. Einzelheiten sind in den Nutzungsbedingungen beschrieben.</div>';
 
 /* Retrieve the article and redirect Ids */
-getAllIds();
+getArticleIds();
+getRedirectIds();
 
 /* Initialization */
 createDirectories();
@@ -81,6 +82,7 @@ saveStylesheet();
 
 /* Save to the disk */
 saveArticles();
+saveRedirects();
 
 /* Save articles */
 function saveArticles() {
@@ -95,6 +97,16 @@ function saveArticles() {
 		saveArticle( articleId, body );
 	    }
 	});
+    });
+}
+
+function saveRedirects() {
+    console.log("Saving redirects...");
+    var redirectTemplateCode = '<html><head><title>{{ title }}</title><meta http-equiv="refresh" content="0; URL={{ target }}"></head><body></body></html>';
+    var tpl = swig.compile( redirectTemplateCode );
+    Object.keys(redirectIds).map( function( redirectId ) {
+	var html = tpl({ title: redirectId.replace( /_/g, ' ' ), target : redirectIds[ redirectId ] });
+	writeFile( html, directory + redirectId );
     });
 }
 
@@ -326,17 +338,12 @@ function saveJavascript() {
 	html = html.replace( '<head>', '<head><base href="' + hostUrl + '" />');
 	var window = jsdom.jsdom( html ).createWindow();
 
-	setTimeout( function() {
-	    console.log("++++++++" + window.document.getElementsByTagName( 'script' ).length);
-	}, 5000);
-
 	window.addEventListener('load', function () {
 	    var nodeNames = [ 'head', 'body' ];
 	    nodeNames.map( function( nodeName ) {
 		var node = window.document.getElementsByTagName( nodeName )[0];
 		var scripts = node.getElementsByTagName( 'script' );
 		var javascriptPath = javascriptDirectory + nodeName + '.js';
-		console.log("---------" + scripts.length);
 		
 		fs.unlink( javascriptPath, function() {} );
 		for ( var i = 0; i < scripts.length ; i++ ) {
@@ -412,43 +419,35 @@ function saveStylesheet() {
 }
 
 /* Get ids */
-function getAllIds() {
-    console.info( 'Getting all article and redirect ids...' );
+function getArticleIds() {
+    console.info( 'Getting article ids...' );
     var next = "";
     var url = undefined;
-    var filters = [ 'nonredirects', 'redirects' ];
-    filters.map( function( filter ) {
-	do {
-	    url = apiUrl + 'action=query&list=allpages&aplimit=500&apnamespace=0&apfilterredir=' + filter + '&format=json&apcontinue=' + next;
-	    var req = httpsync.get({ url : url });
-	    var res = req.end();
-	    var body = res.data.toString();
-	    var entries = JSON.parse( body )['query']['allpages'];
-	    entries.map( function( entry ) {
-		switch ( filter ) {
-		case 'nonredirects':
-		    articleIds[entry['title'].replace( / /g, '_' )] = undefined;
-		    break;
-		case 'redirects':
-		    redirectIds[entry['title'].replace( / /g, '_' )] = undefined;
-		    break;
-		}
-	    });
-	    next = JSON.parse( body )['query-continue'] ? JSON.parse( body )['query-continue']['allpages']['apcontinue'] : undefined;
-	} while ( next );
-    });
+    do {
+	url = apiUrl + 'action=query&list=allpages&aplimit=500&apnamespace=0&format=json&apcontinue=' + decodeURIComponent( next );
+	var req = httpsync.get({ url : url });
+	var res = req.end();
+	var body = res.data.toString();
+	var entries = JSON.parse( body )['query']['allpages'];
+	entries.map( function( entry ) {
+	    articleIds[entry['title'].replace( / /g, '_' )] = undefined;
+	});
+	next = JSON.parse( body )['query-continue'] ? JSON.parse( body )['query-continue']['allpages']['apcontinue'] : undefined;
+    } while ( next );
 }
 
 function getRedirectIds() {
-    console.info( 'Getting redirect for all articles...' );
+    console.info( 'Getting redirect ids...' );
     Object.keys(articleIds).map( function( articleId ) {
 	var url = apiUrl + 'action=query&list=backlinks&blfilterredir=redirects&bllimit=500&format=json&bltitle=' + 
 	    decodeURIComponent( articleId );
-	request( url, function( error, response, body ) {
-	    var redirects = JSON.parse( body )['query']['backlinks'];
-	    redirects.map( function( redirect ) {
-		redirectIds[redirect['title'].replace( / /g, '_' )] = undefined;
-	    });
+	var req = httpsync.get({ url : url });
+	console.log(url);
+	var res = req.end();
+	var body = res.data.toString();
+	var entries = JSON.parse( body )['query']['backlinks'];
+	entries.map( function( entry ) {
+	    redirectIds[entry['title'].replace( / /g, '_' )] = articleId;
 	});
     });
 }
