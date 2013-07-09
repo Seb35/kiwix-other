@@ -42,18 +42,18 @@ var templateHtml = function(){/*
     <link rel="stylesheet" href="style/style.css" />
     <script src="js/head.js"></script>
   </head>
-<body class="mediawiki" style="background-color: white;">
-  <div id="content" style="margin: 0px; border-width: 0px;">
-    <a id="top"></a>
-    <h1 id="firstHeading" class="firstHeading" style="margin-bottom: 0.5em; background-color: white;"></h1>
-    <div style="font-size: smaller; margin-top: -1em;">From Wikipedia, the free encyclopedia</div>
-    <div id="bodyContent">
-      <div id="mw-content-text" style="padding-top: 1em;">
+  <body class="mediawiki" style="background-color: white;">
+    <div id="content" style="margin: 0px; border-width: 0px;">
+      <a id="top"></a>
+      <h1 id="firstHeading" class="firstHeading" style="margin-bottom: 0.5em; background-color: white;"></h1>
+      <div style="font-size: smaller; margin-top: -1em;">From Wikipedia, the free encyclopedia</div>
+      <div id="bodyContent">
+        <div id="mw-content-text" style="padding-top: 1em;">
+        </div>
       </div>
     </div>
-  </div>
-  <script src="js/body.js"></script>
-</body>
+    <script src="js/body.js"></script>
+  </body>
 </html>
 */}.toString().slice(14,-3);
 var templateDoc = domino.createDocument( templateHtml );
@@ -73,7 +73,7 @@ var footerTemplateCode = '<div style="clear:both; background-image:linear-gradie
 
 /* Retrieve the article and redirect Ids */
 //getArticleIds();
-articleIds[ 'France' ] = undefined;
+articleIds[ 'Mayotte' ] = undefined;
 getRedirectIds();
 
 /* Initialization */
@@ -107,7 +107,7 @@ function saveRedirects() {
     var tpl = swig.compile( redirectTemplateCode );
     Object.keys(redirectIds).map( function( redirectId ) {
 	var html = tpl({ title: redirectId.replace( /_/g, ' ' ), target : redirectIds[ redirectId ] });
-	writeFile( html, directory + redirectId );
+	writeFile( html, getArticlePath( redirectId ) );
     });
 }
 
@@ -123,7 +123,7 @@ function saveArticle( articleId, html ) {
 	var filename = decodeURIComponent( pathParser.basename( urlParser.parse( src ).pathname ) );
 
 	/* Download image */
-	downloadFile(src, directory + filename );
+	downloadFile( src, getMediaPath( filename ) );
 
 	/* Change image source attribute to point to the local image */
 	img.setAttribute( 'src', filename );
@@ -322,7 +322,7 @@ function saveArticle( articleId, html ) {
     doc.getElementById( 'mw-content-text' ).appendChild( getFooterNode( doc, articleId ) );
 
     /* Write the static html file */
-    writeFile( doc.documentElement.outerHTML, directory + articleId );
+    writeFile( doc.documentElement.outerHTML, getArticlePath( articleId ) );
 }
 
 /* Grab and concatenate javascript files */
@@ -493,6 +493,7 @@ function getFooterNode( doc, articleId ) {
 
 function writeFile( data, path ) {
     console.info( 'Writing ' + path + '...' );
+    createDirectoryRecursively( pathParser.dirname( path ) );
     fs.writeFile( path, data );
 }
 
@@ -522,4 +523,26 @@ function createDirectory( path ) {
 	    }
 	});
     }
+}
+    
+function createDirectoryRecursively(path, position) {
+    position = position || 0;
+    var parts = pathParser.normalize(path).split('/');
+ 
+    if (position >= parts.length) {
+	return true;
+    }
+ 
+    var directory = parts.slice(0, position + 1).join('/');
+    createDirectory( directory );
+    createDirectoryRecursively(path, position + 1);
+}
+
+/* Internal path/url functions */
+function getMediaPath( filename ) {
+    return directory + filename;
+}
+
+function getArticlePath( articleId ) {
+    return directory + articleId;
 }
