@@ -63,8 +63,8 @@ var articleIds = {};
 var redirectIds = {};
 
 //articleIds['Linux'] = undefined;
-var parsoidUrl = 'http://parsoid.wmflabs.org/bm/';
-var hostUrl = 'http://bm.wikipedia.org/';
+var parsoidUrl = 'http://parsoid.wmflabs.org/en/';
+var hostUrl = 'http://en.wikipedia.org/';
 var webUrl = hostUrl + 'wiki/';
 var apiUrl = hostUrl + 'w/api.php?';
 
@@ -72,7 +72,8 @@ var apiUrl = hostUrl + 'w/api.php?';
 var footerTemplateCode = '<div style="clear:both; background-image:linear-gradient(180deg, #E8E8E8, white); border-top: dashed 2px #AAAAAA; padding: 0.5em 0.5em 2em 0.5em; margin-top: 1em;">Diese Seite kommt von <a class="external text" href="{{ webUrl }}{{ articleId }}">Wikipedia</a>. Der Text ist unter der Lizenz „<a class="external text" href="https://de.wikipedia.org/wiki/Wikipedia:Lizenzbestimmungen_Commons_Attribution-ShareAlike_3.0_Unported">Creative Commons Attribution/Share Alike</a>“ verfügbar; zusätzliche Bedingungen können anwendbar sein. Einzelheiten sind in den Nutzungsbedingungen beschrieben.</div>';
 
 /* Retrieve the article and redirect Ids */
-getArticleIds();
+//getArticleIds();
+articleIds[ 'France' ] = undefined;
 getRedirectIds();
 
 /* Initialization */
@@ -424,12 +425,13 @@ function getArticleIds() {
     var next = "";
     var url = undefined;
     do {
-	url = apiUrl + 'action=query&list=allpages&aplimit=500&apnamespace=0&format=json&apcontinue=' + decodeURIComponent( next );
+	url = apiUrl + 'action=query&generator=allpages&gapfilter=all&gaplimit=500&gapnamespace=0&format=json&gapcontinue=' + decodeURIComponent( next );
 	var req = httpsync.get({ url : url });
 	var res = req.end();
 	var body = res.data.toString();
-	var entries = JSON.parse( body )['query']['allpages'];
-	entries.map( function( entry ) {
+	var entries = JSON.parse( body )['query']['pages'];
+	Object.keys(entries).map( function( key ) {
+	    var entry = entries[key];
 	    articleIds[entry['title'].replace( / /g, '_' )] = undefined;
 	});
 	next = JSON.parse( body )['query-continue'] ? JSON.parse( body )['query-continue']['allpages']['apcontinue'] : undefined;
@@ -442,7 +444,6 @@ function getRedirectIds() {
 	var url = apiUrl + 'action=query&list=backlinks&blfilterredir=redirects&bllimit=500&format=json&bltitle=' + 
 	    decodeURIComponent( articleId );
 	var req = httpsync.get({ url : url });
-	console.log(url);
 	var res = req.end();
 	var body = res.data.toString();
 	var entries = JSON.parse( body )['query']['backlinks'];
@@ -500,6 +501,7 @@ function downloadFile( url, path ) {
 	if ( exists ) {
 	    console.info( path + ' already downloaded, download will be skipped.' );
 	} else {
+	    url = url.replace( /^http\:\/\//, 'http://' );
 	    console.info( 'Downloading ' + url + ' at ' + path + '...' );
 	    var file = fs.createWriteStream( path );
 	    var request = http.get( url, function(response) {
