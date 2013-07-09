@@ -64,8 +64,8 @@ var articleIds = {};
 var redirectIds = {};
 
 //articleIds['Linux'] = undefined;
-var parsoidUrl = 'http://parsoid.wmflabs.org/en/';
-var hostUrl = 'http://en.wikipedia.org/';
+var parsoidUrl = 'http://parsoid.wmflabs.org/bm/';
+var hostUrl = 'http://bm.wikipedia.org/';
 var webUrl = hostUrl + 'wiki/';
 var apiUrl = hostUrl + 'w/api.php?';
 
@@ -73,8 +73,7 @@ var apiUrl = hostUrl + 'w/api.php?';
 var footerTemplateCode = '<div style="clear:both; background-image:linear-gradient(180deg, #E8E8E8, white); border-top: dashed 2px #AAAAAA; padding: 0.5em 0.5em 2em 0.5em; margin-top: 1em;">Diese Seite kommt von <a class="external text" href="{{ webUrl }}{{ articleId }}">Wikipedia</a>. Der Text ist unter der Lizenz „<a class="external text" href="https://de.wikipedia.org/wiki/Wikipedia:Lizenzbestimmungen_Commons_Attribution-ShareAlike_3.0_Unported">Creative Commons Attribution/Share Alike</a>“ verfügbar; zusätzliche Bedingungen können anwendbar sein. Einzelheiten sind in den Nutzungsbedingungen beschrieben.</div>';
 
 /* Retrieve the article and redirect Ids */
-//getArticleIds();
-articleIds[ 'Mayotte' ] = undefined;
+getArticleIds();
 getRedirectIds();
 
 /* Initialization */
@@ -104,10 +103,10 @@ function saveArticles() {
 
 function saveRedirects() {
     console.log("Saving redirects...");
-    var redirectTemplateCode = '<html><head><title>{{ title }}</title><meta http-equiv="refresh" content="0; URL={{ target }}"></head><body></body></html>';
+    var redirectTemplateCode = '<html><head><meta charset="UTF-8" /><title>{{ title }}</title><meta http-equiv="refresh" content="0; URL={{ target }}"></head><body></body></html>';
     var tpl = swig.compile( redirectTemplateCode );
     Object.keys(redirectIds).map( function( redirectId ) {
-	var html = tpl({ title: redirectId.replace( /_/g, ' ' ), target : redirectIds[ redirectId ] });
+	var html = tpl({ title: redirectId.replace( /_/g, ' ' ), target : getArticleUrl( redirectIds[ redirectId ] ) });
 	writeFile( html, getArticlePath( redirectId ) );
     });
 }
@@ -431,7 +430,7 @@ function getArticleIds() {
     var next = "";
     var url = undefined;
     do {
-	url = apiUrl + 'action=query&generator=allpages&gapfilter=all&gaplimit=500&gapnamespace=0&format=json&gapcontinue=' + decodeURIComponent( next );
+	url = apiUrl + 'action=query&generator=allpages&gapfilterredir=nonredirects&gaplimit=500&gapnamespace=0&format=json&gapcontinue=' + decodeURIComponent( next );
 	var req = httpsync.get({ url : url });
 	var res = req.end();
 	var body = res.data.toString();
@@ -554,7 +553,7 @@ function getMediaPath( filename ) {
 }
 
 function getMediaBase( filename ) {
-    var regex = /^(\d+|)(px-|)(.*?\.[A-Za-z0-9]{3,6})(\.[A-Za-z0-9]{3,6}|)$/;
+    var regex = /^(\d+|)(px-|)(.*?)(\.[A-Za-z0-9]{3,6})(\.[A-Za-z0-9]{3,6}|)$/;
     var parts = regex.exec( filename );
     var root = parts[3];
 
@@ -564,7 +563,7 @@ function getMediaBase( filename ) {
     }
 
     return mediaDirectory + '/' + ( root[0] || '_' ) + '/' + ( root[1] || '_' ) + '/' + 
-	( root[2] || '_' ) + '/' + (root[4] || '_') + '/' + filename; 
+	( root[2] || '_' ) + '/' + (root[3] || '_') + '/' + filename; 
 }
 
 function getArticleUrl( articleId ) {
@@ -576,7 +575,7 @@ function getArticlePath( articleId ) {
 }
 
 function getArticleBase( articleId ) {
-    var filename = articleId + '.html';
+    var filename = articleId.replace( /\//g, '_' );
     return htmlDirectory + '/' + ( filename[0] || '_' ) + '/' + ( filename[1] || '_' ) + '/' + 
-	( filename[2] || '_' ) + '/' + (filename[4] || '_') + '/' + filename;
+	( filename[2] || '_' ) + '/' + (filename[3] || '_') + '/' + filename + '.html';
 }
