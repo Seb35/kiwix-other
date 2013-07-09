@@ -76,7 +76,7 @@ var footerTemplateCode = '';//'<div style="clear:both; background-image:linear-g
 
 /* Retrieve the article and redirect Ids */
 getArticleIds();
-getRedirectIds();
+//getRedirectIds();
 
 /* Initialization */
 createDirectories();
@@ -546,8 +546,8 @@ function loadUrl( url ) {
 
 function downloadMedia( url, filename ) {
     var parts = mediaRegex.exec( filename );
-    var width = parts[1] || 9999999;
-    var filenameBase = parts[3] + parts[4] + ( parts[5] || '' );
+    var width = parts.length ? parts[1] : 9999999;
+    var filenameBase = parts.length ? parts[3] + parts[4] + ( parts[5] || '' ) : filename;
 
     if ( mediaIds[ filenameBase ] && mediaIds[ filenameBase ] >= width ) {
 	return;
