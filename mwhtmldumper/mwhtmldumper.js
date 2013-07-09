@@ -521,8 +521,10 @@ function writeFile( data, path ) {
     console.info( 'Writing ' + path + '...' );
     createDirectoryRecursively( pathParser.dirname( path ) );
     fs.writeFile( path, data, function( error ) {
-	if (error) throw error;
-	process.exit(1);
+	if (error) {
+	    throw error;
+	    process.exit(1);
+	}
     });
 }
 
