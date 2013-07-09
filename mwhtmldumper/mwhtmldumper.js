@@ -40,8 +40,8 @@ var templateHtml = function(){/*
   <head>
     <meta charset="UTF-8" />
     <title></title>
-    <link rel="stylesheet" href="../style/style.css" />
-    <script src="../js/head.js"></script>
+    <link rel="stylesheet" href="../../../../../style/style.css" />
+    <script src="../../../../../js/head.js"></script>
   </head>
   <body class="mediawiki" style="background-color: white;">
     <div id="content" style="margin: 0px; border-width: 0px;">
@@ -53,7 +53,7 @@ var templateHtml = function(){/*
         </div>
       </div>
     </div>
-    <script src="../js/body.js"></script>
+    <script src="../../../../../js/body.js"></script>
   </body>
 </html>
 */}.toString().slice(14,-3);
@@ -167,12 +167,14 @@ function saveArticle( articleId, html ) {
 	    /* Remove internal links pointing to no mirrored articles */
 	    else if ( rel.substring( 0, 11 ) === 'mw:WikiLink' ) {
 		var targetId = decodeURIComponent( href.replace(/^\.\//, '') );
-
+		
 		if ( ! ( targetId in articleIds || targetId in redirectIds ) ) {
 		    while ( a.firstChild ) {
 			a.parentNode.insertBefore( a.firstChild, a);
 		    }
 		    a.parentNode.removeChild( a );
+		} else {
+		    a.setAttribute( 'href', getArticleUrl( targetId ) );
 		}
 	    }
 	} else {
@@ -184,6 +186,8 @@ function saveArticle( articleId, html ) {
 			a.parentNode.insertBefore( a.firstChild, a);
 		    }
 		    a.parentNode.removeChild( a );
+		} else {
+			a.setAttribute( 'href', getArticleUrl( targetId ) );
 		}
 	    }
 	}
@@ -542,7 +546,7 @@ function downloadFile( url, path ) {
 
 /* Internal path/url functions */
 function getMediaUrl( filename ) {
-    return '../' + getMediaBase( filename );
+    return '../../../../../' + getMediaBase( filename );
 }
 
 function getMediaPath( filename ) {
@@ -550,7 +554,6 @@ function getMediaPath( filename ) {
 }
 
 function getMediaBase( filename ) {
-//    29px-Terrestrial_globe.svg.png
     var regex = /^(\d+|)(px-|)(.*?\.[A-Za-z0-9]{3,6})(\.[A-Za-z0-9]{3,6}|)$/;
     var parts = regex.exec( filename );
     var root = parts[3];
@@ -564,6 +567,16 @@ function getMediaBase( filename ) {
 	( root[2] || '_' ) + '/' + (root[4] || '_') + '/' + filename; 
 }
 
+function getArticleUrl( articleId ) {
+    return '../../../../../' + getArticleBase( articleId );
+}
+
 function getArticlePath( articleId ) {
-    return rootPath + htmlDirectory + '/' + articleId + '.html';
+    return rootPath + getArticleBase( articleId );
+}
+
+function getArticleBase( articleId ) {
+    var filename = articleId + '.html';
+    return htmlDirectory + '/' + ( filename[0] || '_' ) + '/' + ( filename[1] || '_' ) + '/' + 
+	( filename[2] || '_' ) + '/' + (filename[4] || '_') + '/' + filename;
 }
