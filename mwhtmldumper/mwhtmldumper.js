@@ -2,7 +2,7 @@
 "use strict";
 
 /* Load required modules */
-var fs = require('fs');
+var fs = require('graceful-fs');
 var request = require('request');
 var domino = require('domino');
 var urlParser = require('url');
@@ -66,13 +66,13 @@ var redirectIds = {};
 var mediaIds = {};
 
 //articleIds['Linux'] = undefined;
-var parsoidUrl = 'http://parsoid.wmflabs.org/bm/';
-var hostUrl = 'http://bm.wikipedia.org/';
+var parsoidUrl = 'http://parsoid.wmflabs.org/as/';
+var hostUrl = 'http://as.wikipedia.org/';
 var webUrl = hostUrl + 'wiki/';
 var apiUrl = hostUrl + 'w/api.php?';
 
 /* Footer */
-var footerTemplateCode = '<div style="clear:both; background-image:linear-gradient(180deg, #E8E8E8, white); border-top: dashed 2px #AAAAAA; padding: 0.5em 0.5em 2em 0.5em; margin-top: 1em;">Diese Seite kommt von <a class="external text" href="{{ webUrl }}{{ articleId }}">Wikipedia</a>. Der Text ist unter der Lizenz „<a class="external text" href="https://de.wikipedia.org/wiki/Wikipedia:Lizenzbestimmungen_Commons_Attribution-ShareAlike_3.0_Unported">Creative Commons Attribution/Share Alike</a>“ verfügbar; zusätzliche Bedingungen können anwendbar sein. Einzelheiten sind in den Nutzungsbedingungen beschrieben.</div>';
+var footerTemplateCode = '';//'<div style="clear:both; background-image:linear-gradient(180deg, #E8E8E8, white); border-top: dashed 2px #AAAAAA; padding: 0.5em 0.5em 2em 0.5em; margin-top: 1em;">Diese Seite kommt von <a class="external text" href="{{ webUrl }}{{ articleId }}">Wikipedia</a>. Der Text ist unter der Lizenz „<a class="external text" href="https://de.wikipedia.org/wiki/Wikipedia:Lizenzbestimmungen_Commons_Attribution-ShareAlike_3.0_Unported">Creative Commons Attribution/Share Alike</a>“ verfügbar; zusätzliche Bedingungen können anwendbar sein. Einzelheiten sind in den Nutzungsbedingungen beschrieben.</div>';
 
 /* Retrieve the article and redirect Ids */
 getArticleIds();
@@ -360,10 +360,8 @@ function saveJavascript() {
 		    if ( url ) {
 			url = getFullUrl( url );
 			console.info( 'Downloading javascript from ' + url );
-			var req = httpsync.get({ url : url });
-			var res = req.end();
-			var body = res.data.toString().replace( '"//', '"http://');
-			
+			var body = loadUrl( url ).replace( '"//', '"http://' );
+
 			fs.appendFile( javascriptPath, '\n' + body + '\n', function (err) {} );
 		    } else {
 			fs.appendFile( javascriptPath, '\n' + script.innerHTML + '\n', function (err) {} );
@@ -433,9 +431,7 @@ function getArticleIds() {
     var url = undefined;
     do {
 	url = apiUrl + 'action=query&generator=allpages&gapfilterredir=nonredirects&gaplimit=500&gapnamespace=0&format=json&gapcontinue=' + decodeURIComponent( next );
-	var req = httpsync.get({ url : url });
-	var res = req.end();
-	var body = res.data.toString();
+	var body = loadUrl( url )
 	var entries = JSON.parse( body )['query']['pages'];
 	Object.keys(entries).map( function( key ) {
 	    var entry = entries[key];
@@ -446,13 +442,11 @@ function getArticleIds() {
 }
 
 function getRedirectIds() {
-    console.info( 'Getting redirect ids...' );
     Object.keys(articleIds).map( function( articleId ) {
+	console.info( 'Getting redirect ids...' );
 	var url = apiUrl + 'action=query&list=backlinks&blfilterredir=redirects&bllimit=500&format=json&bltitle=' + 
 	    decodeURIComponent( articleId );
-	var req = httpsync.get({ url : url });
-	var res = req.end();
-	var body = res.data.toString();
+	var body = loadUrl( url );
 	var entries = JSON.parse( body )['query']['backlinks'];
 	entries.map( function( entry ) {
 	    redirectIds[entry['title'].replace( / /g, '_' )] = articleId;
@@ -526,7 +520,26 @@ function getFooterNode( doc, articleId ) {
 function writeFile( data, path ) {
     console.info( 'Writing ' + path + '...' );
     createDirectoryRecursively( pathParser.dirname( path ) );
-    fs.writeFile( path, data );
+    fs.writeFile( path, data, function( error ) {
+	if (error) throw error;
+	process.exit(1);
+    });
+}
+
+function loadUrl( url ) {
+    var tryCount = 0;
+    do {
+	try {
+	    var req = httpsync.get({ url : url });
+	    var res = req.end();
+	    return res.data.toString();
+	} catch ( error ) {
+	    if (tryCount++ > 5) {
+		console.error( error );
+		process.exit(1);
+	    }
+	}
+    } while (true);
 }
 
 function downloadMedia( url, filename ) {
