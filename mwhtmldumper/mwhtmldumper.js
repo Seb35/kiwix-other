@@ -13,13 +13,14 @@ var httpsync = require('httpsync');
 var jsdom = require("jsdom");
 var sleep = require("sleep");
 
+/* Paths */
+var rootPath = 'static/';
+var styleDirectory = 'style';
+var htmlDirectory = 'html';
+var mediaDirectory = 'media';
+var javascriptDirectory = 'js';
+
 /* Global variables */
-var directory = 'static/';
-var styleDirectory = directory + 'style/';
-var htmlDirectory = directory + 'html/';
-var mediaDirectory = directory + 'media/';
-var javascriptDirectory = directory + 'js/';
-var stylePath = styleDirectory + 'style.css';
 var withCategories = false;
 var withMedias = true;
 var cssClassBlackList = [ 'noprint', 'ambox', 'stub', 'topicon', 'magnify' ];
@@ -39,8 +40,8 @@ var templateHtml = function(){/*
   <head>
     <meta charset="UTF-8" />
     <title></title>
-    <link rel="stylesheet" href="style/style.css" />
-    <script src="js/head.js"></script>
+    <link rel="stylesheet" href="../style/style.css" />
+    <script src="../js/head.js"></script>
   </head>
   <body class="mediawiki" style="background-color: white;">
     <div id="content" style="margin: 0px; border-width: 0px;">
@@ -52,7 +53,7 @@ var templateHtml = function(){/*
         </div>
       </div>
     </div>
-    <script src="js/body.js"></script>
+    <script src="../js/body.js"></script>
   </body>
 </html>
 */}.toString().slice(14,-3);
@@ -126,7 +127,7 @@ function saveArticle( articleId, html ) {
 	downloadFile( src, getMediaPath( filename ) );
 
 	/* Change image source attribute to point to the local image */
-	img.setAttribute( 'src', filename );
+	img.setAttribute( 'src', getMediaUrl( filename ) );
 	
 	/* Remove useless 'resource' attribute */
 	img.removeAttribute( 'resource' ); 
@@ -344,7 +345,7 @@ function saveJavascript() {
 	    nodeNames.map( function( nodeName ) {
 		var node = window.document.getElementsByTagName( nodeName )[0];
 		var scripts = node.getElementsByTagName( 'script' );
-		var javascriptPath = javascriptDirectory + nodeName + '.js';
+		var javascriptPath = rootPath + javascriptDirectory + '/' + nodeName + '.js';
 		
 		fs.unlink( javascriptPath, function() {} );
 		for ( var i = 0; i < scripts.length ; i++ ) {
@@ -372,6 +373,7 @@ function saveJavascript() {
 /* Grab and concatenate stylesheet files */
 function saveStylesheet() {
     console.info( 'Creating stylesheet...' );
+    var stylePath = rootPath + styleDirectory + '/style.css';
     fs.unlink( stylePath, function() {} );
     request( webUrl, function( error, response, html ) {
 	var doc = domino.createDocument( html );
@@ -408,7 +410,7 @@ function saveStylesheet() {
 			    url = getFullUrl( url );
 			    
 			    /* Download CSS dependency */
-			    downloadFile(url, styleDirectory + filename );
+			    downloadFile(url, rootPath + styleDirectory + '/' +filename );
 			}
 		    }
 		    
@@ -455,12 +457,37 @@ function getRedirectIds() {
 
 /* Create directories for static files */
 function createDirectories() {
-    console.info( 'Creating directories at \'' + directory + '\'...' );
-    createDirectory( directory );
-    createDirectory( styleDirectory );
-    createDirectory( htmlDirectory );
-    createDirectory( mediaDirectory );
-    createDirectory( javascriptDirectory );
+    console.info( 'Creating directories at \'' + rootPath + '\'...' );
+    createDirectory( rootPath );
+    createDirectory( rootPath + styleDirectory );
+    createDirectory( rootPath + htmlDirectory );
+    createDirectory( rootPath + mediaDirectory );
+    createDirectory( rootPath + javascriptDirectory );
+}
+
+function createDirectory( path ) {
+    try {
+	fs.mkdirSync( path );
+    } catch ( error ) {
+	fs.exists( path, function ( exists ) {
+	    if ( ! ( exists && fs.lstatSync( path ).isDirectory() ) ) {
+		console.error( 'Unable to create directory \'' + path + '\'' );
+		process.exit( 1 );
+	    }
+	});
+    }
+}
+    
+function createDirectoryRecursively( path, position ) {
+    position = position || 0;
+    var parts = pathParser.normalize( path ).split( '/' );
+ 
+    if ( position >= parts.length ) {
+	return true;
+    }
+ 
+    createDirectory( parts.slice( 0, position + 1 ).join( '/' ) );
+    createDirectoryRecursively( path, position + 1 );
 }
 
 /* Multiple developer friendly functions */
@@ -504,6 +531,7 @@ function downloadFile( url, path ) {
 	} else {
 	    url = url.replace( /^http\:\/\//, 'http://' );
 	    console.info( 'Downloading ' + url + ' at ' + path + '...' );
+	    createDirectoryRecursively( pathParser.dirname( path ) );
 	    var file = fs.createWriteStream( path );
 	    var request = http.get( url, function(response) {
 		response.pipe(file);
@@ -512,37 +540,30 @@ function downloadFile( url, path ) {
     });
 }
 
-function createDirectory( path ) {
-    try {
-	fs.mkdirSync( path );
-    } catch ( error ) {
-	fs.exists( path, function ( exists ) {
-	    if ( ! ( exists && fs.lstatSync( path ).isDirectory() ) ) {
-		console.error( 'Unable to create directory \'' + path + '\'' );
-		process.exit( 1 );
-	    }
-	});
-    }
-}
-    
-function createDirectoryRecursively(path, position) {
-    position = position || 0;
-    var parts = pathParser.normalize(path).split('/');
- 
-    if (position >= parts.length) {
-	return true;
-    }
- 
-    var directory = parts.slice(0, position + 1).join('/');
-    createDirectory( directory );
-    createDirectoryRecursively(path, position + 1);
+/* Internal path/url functions */
+function getMediaUrl( filename ) {
+    return '../' + getMediaBase( filename );
 }
 
-/* Internal path/url functions */
 function getMediaPath( filename ) {
-    return directory + filename;
+    return rootPath + getMediaBase( filename );
+}
+
+function getMediaBase( filename ) {
+//    29px-Terrestrial_globe.svg.png
+    var regex = /^(\d+|)(px-|)(.*?\.[A-Za-z0-9]{3,6})(\.[A-Za-z0-9]{3,6}|)$/;
+    var parts = regex.exec( filename );
+    var root = parts[3];
+
+    if ( !root) {
+	console.error( 'Unable to parse filename \'' + filename + '\'' );
+	process.exit( 1 );
+    }
+
+    return mediaDirectory + '/' + ( root[0] || '_' ) + '/' + ( root[1] || '_' ) + '/' + 
+	( root[2] || '_' ) + '/' + (root[4] || '_') + '/' + filename; 
 }
 
 function getArticlePath( articleId ) {
-    return directory + articleId;
+    return rootPath + htmlDirectory + '/' + articleId + '.html';
 }
