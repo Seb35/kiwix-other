@@ -23,6 +23,7 @@ var javascriptDirectory = 'js';
 /* Global variables */
 var withCategories = false;
 var withMedias = true;
+var mediaRegex = /^(\d+|)(px-|)(.*?)(\.[A-Za-z0-9]{3,6})(\.[A-Za-z0-9]{3,6}|)$/;
 var cssClassBlackList = [ 'noprint', 'ambox', 'stub', 'topicon', 'magnify' ];
 var cssClassBlackListIfNoLink = [ 'mainarticle', 'seealso', 'dablink', 'rellink' ];
 var cssClassCallsBlackList = [ 'plainlinks' ];
@@ -62,6 +63,7 @@ var templateDoc = domino.createDocument( templateHtml );
 /* Input variables */
 var articleIds = {};
 var redirectIds = {};
+var mediaIds = {};
 
 //articleIds['Linux'] = undefined;
 var parsoidUrl = 'http://parsoid.wmflabs.org/bm/';
@@ -123,7 +125,7 @@ function saveArticle( articleId, html ) {
 	var filename = decodeURIComponent( pathParser.basename( urlParser.parse( src ).pathname ) );
 
 	/* Download image */
-	downloadFile( src, getMediaPath( filename ) );
+	downloadMedia( src, filename );
 
 	/* Change image source attribute to point to the local image */
 	img.setAttribute( 'src', getMediaUrl( filename ) );
@@ -527,6 +529,20 @@ function writeFile( data, path ) {
     fs.writeFile( path, data );
 }
 
+function downloadMedia( url, filename ) {
+    var parts = mediaRegex.exec( filename );
+    var width = parts[1] || 9999999;
+    var filenameBase = parts[3] + parts[4] + ( parts[5] || '' );
+
+    if ( mediaIds[ filenameBase ] && mediaIds[ filenameBase ] >= width ) {
+	return;
+    } else {
+	mediaIds[ filenameBase ] = width;
+    }
+
+    downloadFile( url, getMediaPath( filename ) );
+}
+
 function downloadFile( url, path ) {
     fs.exists( path, function ( exists ) {
 	if ( exists ) {
@@ -553,8 +569,7 @@ function getMediaPath( filename ) {
 }
 
 function getMediaBase( filename ) {
-    var regex = /^(\d+|)(px-|)(.*?)(\.[A-Za-z0-9]{3,6})(\.[A-Za-z0-9]{3,6}|)$/;
-    var parts = regex.exec( filename );
+    var parts = mediaRegex.exec( filename );
     var root = parts[3];
 
     if ( !root) {
@@ -563,7 +578,8 @@ function getMediaBase( filename ) {
     }
 
     return mediaDirectory + '/' + ( root[0] || '_' ) + '/' + ( root[1] || '_' ) + '/' + 
-	( root[2] || '_' ) + '/' + (root[3] || '_') + '/' + filename; 
+	( root[2] || '_' ) + '/' + ( root[3] || '_' ) + '/' + parts[3] + parts[4] + ( parts[5] || '' );
+; 
 }
 
 function getArticleUrl( articleId ) {
@@ -577,5 +593,5 @@ function getArticlePath( articleId ) {
 function getArticleBase( articleId ) {
     var filename = articleId.replace( /\//g, '_' );
     return htmlDirectory + '/' + ( filename[0] || '_' ) + '/' + ( filename[1] || '_' ) + '/' + 
-	( filename[2] || '_' ) + '/' + (filename[3] || '_') + '/' + filename + '.html';
+	( filename[2] || '_' ) + '/' + ( filename[3] || '_' ) + '/' + filename + '.html';
 }
