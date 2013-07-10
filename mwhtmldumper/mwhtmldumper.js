@@ -23,7 +23,7 @@ var javascriptDirectory = 'js';
 /* Global variables */
 var withCategories = false;
 var withMedias = true;
-var mediaRegex = /^(\d+|)(px-|)(.*?)(\.[A-Za-z0-9]{3,6})(\.[A-Za-z0-9]{3,6}|)$/;
+var mediaRegex = /^(\d+|)(px-|)(.*?)(\.[A-Za-z0-9]{2,6})(\.[A-Za-z0-9]{2,6}|)$/;
 var cssClassBlackList = [ 'noprint', 'ambox', 'stub', 'topicon', 'magnify' ];
 var cssClassBlackListIfNoLink = [ 'mainarticle', 'seealso', 'dablink', 'rellink' ];
 var cssClassCallsBlackList = [ 'plainlinks' ];
@@ -76,7 +76,7 @@ var footerTemplateCode = '';//'<div style="clear:both; background-image:linear-g
 
 /* Retrieve the article and redirect Ids */
 getArticleIds();
-//getRedirectIds();
+getRedirectIds();
 
 /* Initialization */
 createDirectories();
@@ -546,8 +546,8 @@ function loadUrl( url ) {
 
 function downloadMedia( url, filename ) {
     var parts = mediaRegex.exec( filename );
-    var width = parts.length ? parts[1] : 9999999;
-    var filenameBase = parts.length ? parts[3] + parts[4] + ( parts[5] || '' ) : filename;
+    var width = parts[1] || 9999999;
+    var filenameBase = parts[3] + parts[4] + ( parts[5] || '' );
 
     if ( mediaIds[ filenameBase ] && mediaIds[ filenameBase ] >= width ) {
 	return;
