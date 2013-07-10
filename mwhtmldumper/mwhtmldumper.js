@@ -545,12 +545,12 @@ function loadUrl( url ) {
 	    var res = req.end();
 	    return res.data.toString();
 	} catch ( error ) {
-	    if (tryCount++ > 5) {
+	    if ( tryCount++ > 5 ) {
 		console.error( error );
-		process.exit(1);
+		process.exit( 1 );
 	    }
 	}
-    } while (true);
+    } while ( true );
 }
 
 function downloadMedia( url, filename ) {
@@ -576,9 +576,20 @@ function downloadFile( url, path, force ) {
 	    console.info( 'Downloading ' + url + ' at ' + path + '...' );
 	    createDirectoryRecursively( pathParser.dirname( path ) );
 	    var file = fs.createWriteStream( path );
-	    var request = http.get( url, function(response) {
-		response.pipe(file);
-	    });
+	    var tryCount = 0;
+	    do {
+		try {
+		    var request = http.get( url, function(response) {
+			    response.pipe(file);
+			});
+		    return;
+		} catch ( error ) {
+		    if ( tryCount++ > 5 ) {
+			console.error( error );
+			process.exit( 1 );
+		    }	    
+		}
+	    } while ( true );
 	}			    
     });
 }
