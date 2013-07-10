@@ -66,8 +66,8 @@ var redirectIds = {};
 var mediaIds = {};
 
 //articleIds['Linux'] = undefined;
-var parsoidUrl = 'http://parsoid.wmflabs.org/as/';
-var hostUrl = 'http://as.wikipedia.org/';
+var parsoidUrl = 'http://parsoid.wmflabs.org/sr/';
+var hostUrl = 'http://sr.wikipedia.org/';
 var webUrl = hostUrl + 'wiki/';
 var apiUrl = hostUrl + 'w/api.php?';
 
@@ -76,7 +76,7 @@ var footerTemplateCode = '';//'<div style="clear:both; background-image:linear-g
 
 /* Retrieve the article and redirect Ids */
 getArticleIds();
-getRedirectIds();
+//getRedirectIds();
 
 /* Initialization */
 createDirectories();
@@ -163,6 +163,7 @@ function saveArticle( articleId, html ) {
 
 	    if ( ! href ) {
 		console.log(a.outerHTML);
+		break;
 		process.exit(1);
 	    }
 
@@ -445,7 +446,7 @@ function getArticleIds() {
 	    var entry = entries[key];
 	    articleIds[entry['title'].replace( / /g, '_' )] = undefined;
 	});
-	next = JSON.parse( body )['query-continue'] ? JSON.parse( body )['query-continue']['allpages']['apcontinue'] : undefined;
+	next = JSON.parse( body )['query-continue'] ? JSON.parse( body )['query-continue']['allpages']['gapcontinue'] : undefined;
     } while ( next );
 }
 
