@@ -116,7 +116,15 @@ function saveRedirects() {
 function saveArticle( articleId, html ) {
     console.info( 'Parsing HTML/RDF of ' + articleId + '...' );
     var parsoidDoc = domino.createDocument( html );
-    
+
+    /* Go through gallerybox */
+    var galleryboxes = parsoidDoc.getElementsByClassName( 'gallerybox' );
+    for ( var i = 0; i < galleryboxes.length ; i++ ) {
+	if ( ! galleryboxes[i].getElementsByClassName( 'thumb' ).length ) {
+	    deleteNode( galleryboxes[i] );
+	}
+    }
+
     /* Go through all images */
     var imgs = parsoidDoc.getElementsByTagName( 'img' );
     for ( var i = 0; i < imgs.length ; i++ ) {
@@ -299,9 +307,9 @@ function saveArticle( articleId, html ) {
     var contentNode = doc.getElementById( 'mw-content-text' );
     contentNode.innerHTML = parsoidDoc.getElementsByTagName( 'body' )[0].innerHTML;
     var contentTitleNode = doc.getElementById( 'firstHeading' );
-    contentTitleNode.innerHTML = parsoidDoc.getElementsByTagName( 'title' )[0].innerHTML;
+    contentTitleNode.innerHTML = articleId.replace( /_/g, ' ' );
     var titleNode = doc.getElementsByTagName( 'title' )[0];
-    titleNode.innerHTML = parsoidDoc.getElementsByTagName( 'title' )[0].innerHTML;
+    titleNode.innerHTML = articleId.replace( /_/g, ' ' );
 
     /* Clean the DOM of all uncessary code */
     var allNodes = doc.getElementsByTagName( '*' );
@@ -549,18 +557,18 @@ function downloadMedia( url, filename ) {
     var width = parts[1] || 9999999;
     var filenameBase = parts[3] + parts[4] + ( parts[5] || '' );
 
-    if ( mediaIds[ filenameBase ] && mediaIds[ filenameBase ] >= width ) {
+    if ( mediaIds[ filenameBase ] &&  parseInt( mediaIds[ filenameBase ] ) >=  parseInt( width ) ) {
 	return;
     } else {
 	mediaIds[ filenameBase ] = width;
     }
 
-    downloadFile( url, getMediaPath( filename ) );
+    downloadFile( url, getMediaPath( filename ), true );
 }
 
-function downloadFile( url, path ) {
+function downloadFile( url, path, force ) {
     fs.exists( path, function ( exists ) {
-	if ( exists ) {
+	if ( exists && !force ) {
 	    console.info( path + ' already downloaded, download will be skipped.' );
 	} else {
 	    url = url.replace( /^http\:\/\//, 'http://' );
