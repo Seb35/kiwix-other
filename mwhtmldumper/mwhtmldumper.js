@@ -13,6 +13,9 @@ var httpsync = require('httpsync');
 var jsdom = require("jsdom");
 var sleep = require("sleep");
 
+/* Increase parallel connection limit */
+http.globalAgent.maxSockets = 10;
+
 /* Paths */
 var rootPath = 'static/';
 var styleDirectory = 'style';
