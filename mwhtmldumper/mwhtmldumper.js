@@ -140,6 +140,17 @@ function saveArticle( articleId, html ) {
 	}
     }
 
+    /* Remove useless DOM nodes without children */
+    var tagNames = [ 'li', 'span' ];
+    tagNames.map( function( tagName ) {
+	    var nodes = parsoidDoc.getElementsByTagName( tagName );
+	    for ( var i = 0; i < nodes.length ; i++ ) {
+	        if ( ! nodes[i].innerHTML ) {
+		    deleteNode( nodes[i] );
+		}
+	    };
+    });
+
     /* Go through all images */
     var imgs = parsoidDoc.getElementsByTagName( 'img' );
     for ( var i = 0; i < imgs.length ; i++ ) {
@@ -648,6 +659,7 @@ function getArticlePath( articleId ) {
 
 function getArticleBase( articleId ) {
     var filename = articleId.replace( /\//g, '_' );
-    return htmlDirectory + '/' + ( filename[0] || '_' ) + '/' + ( filename[1] || '_' ) + '/' + 
-	( filename[2] || '_' ) + '/' + ( filename[3] || '_' ) + '/' + filename + '.html';
+    var dirBase = filename.replace( /\./g, '_');
+    return htmlDirectory + '/' + ( dirBase[0] || '_' ) + '/' + ( dirBase[1] || '_' ) + '/' + 
+	( dirBase[2] || '_' ) + '/' + ( dirBase[3] || '_' ) + '/' + filename + '.html';
 }
