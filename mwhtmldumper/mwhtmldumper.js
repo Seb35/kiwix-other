@@ -23,7 +23,7 @@ var javascriptDirectory = 'js';
 /* Global variables */
 var withCategories = false;
 var withMedias = true;
-var mediaRegex = /^(\d+|)(px-|)(.*?)(\.[A-Za-z0-9]{2,6})(\.[A-Za-z0-9]{2,6}|)$/;
+var mediaRegex = /^(\d+px-|)(.*?)(\.[A-Za-z0-9]{2,6})(\.[A-Za-z0-9]{2,6}|)$/;
 var cssClassBlackList = [ 'noprint', 'ambox', 'stub', 'topicon', 'magnify' ];
 var cssClassBlackListIfNoLink = [ 'mainarticle', 'seealso', 'dablink', 'rellink' ];
 var cssClassCallsBlackList = [ 'plainlinks' ];
@@ -74,6 +74,11 @@ var apiUrl = hostUrl + 'w/api.php?';
 /* Footer */
 var footerTemplateCode = '';//'<div style="clear:both; background-image:linear-gradient(180deg, #E8E8E8, white); border-top: dashed 2px #AAAAAA; padding: 0.5em 0.5em 2em 0.5em; margin-top: 1em;">Diese Seite kommt von <a class="external text" href="{{ webUrl }}{{ articleId }}">Wikipedia</a>. Der Text ist unter der Lizenz „<a class="external text" href="https://de.wikipedia.org/wiki/Wikipedia:Lizenzbestimmungen_Commons_Attribution-ShareAlike_3.0_Unported">Creative Commons Attribution/Share Alike</a>“ verfügbar; zusätzliche Bedingungen können anwendbar sein. Einzelheiten sind in den Nutzungsbedingungen beschrieben.</div>';
 
+/* Event catchers */
+process.on('uncaughtException', function (err) {
+    console.error('Caught exception: ' + err);
+});
+
 /* Retrieve the article and redirect Ids */
 getArticleIds();
 //getRedirectIds();
@@ -92,14 +97,24 @@ function saveArticles() {
     Object.keys(articleIds).map( function( articleId ) {
 	var articleUrl = parsoidUrl + articleId;
 	console.info( 'Downloading article from ' + articleUrl + '...' );
-	request( articleUrl, function( error, response, body ) {
-	    if ( error ) {
-		console.error( "Unable to retrieve '" + articleId + "'");
-		process.exit(1);
-	    } else {
-		saveArticle( articleId, body );
+	var tryCount = 0;
+	do {
+	    try {
+		request( articleUrl, function( error, response, body ) {
+			if ( error || !body ) {
+			    throw error;
+			} else {
+			    saveArticle( articleId, body );
+			}
+		    });
+		break;
+	    } catch ( error ) {
+		if ( tryCount++ > 5 ) {
+		    console.error( "Unable to retrieve '" + articleId + "'" );
+		    process.exit( 1 );
+		}
 	    }
-	});
+	} while ( true );
     });
 }
 
@@ -528,6 +543,12 @@ function getFooterNode( doc, articleId ) {
 
 function writeFile( data, path ) {
     console.info( 'Writing ' + path + '...' );
+    
+    if (pathParser.dirname( path ).indexOf('./') >= 0) {
+	console.error( "Wrong path " + path );
+	process.exit( 1 );
+    }
+
     createDirectoryRecursively( pathParser.dirname( path ) );
     fs.writeFile( path, data, function( error ) {
 	if (error) {
@@ -555,8 +576,8 @@ function loadUrl( url ) {
 
 function downloadMedia( url, filename ) {
     var parts = mediaRegex.exec( filename );
-    var width = parts[1] || 9999999;
-    var filenameBase = parts[3] + parts[4] + ( parts[5] || '' );
+    var width = parts[1].replace( /px\-/g, '' ) || 9999999;
+    var filenameBase = parts[2] + parts[3] + ( parts[4] || '' );
 
     if ( mediaIds[ filenameBase ] &&  parseInt( mediaIds[ filenameBase ] ) >=  parseInt( width ) ) {
 	return;
@@ -605,7 +626,7 @@ function getMediaPath( filename ) {
 
 function getMediaBase( filename ) {
     var parts = mediaRegex.exec( filename );
-    var root = parts[3];
+    var root = parts[2];
 
     if ( !root) {
 	console.error( 'Unable to parse filename \'' + filename + '\'' );
@@ -613,7 +634,7 @@ function getMediaBase( filename ) {
     }
 
     return mediaDirectory + '/' + ( root[0] || '_' ) + '/' + ( root[1] || '_' ) + '/' + 
-	( root[2] || '_' ) + '/' + ( root[3] || '_' ) + '/' + parts[3] + parts[4] + ( parts[5] || '' );
+	( root[2] || '_' ) + '/' + ( root[3] || '_' ) + '/' + parts[2] + parts[3] + ( parts[4] || '' );
 ; 
 }
 
