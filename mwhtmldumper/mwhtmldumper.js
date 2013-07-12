@@ -27,15 +27,16 @@ var javascriptDirectory = 'js';
 var withCategories = false;
 var withMedias = true;
 var mediaRegex = /^(\d+px-|)(.*?)(\.[A-Za-z0-9]{2,6})(\.[A-Za-z0-9]{2,6}|)$/;
+
+/* Content specific */
 var cssClassBlackList = [ 'noprint', 'ambox', 'stub', 'topicon', 'magnify' ];
 var cssClassBlackListIfNoLink = [ 'mainarticle', 'seealso', 'dablink', 'rellink' ];
 var cssClassCallsBlackList = [ 'plainlinks' ];
 var idBlackList = [ 'purgelink' ];
 var ltr = true;
-
-/* alignements */
 var autoAlign = ltr ? 'left' : 'right';
 var revAutoAlign = ltr ? 'right' : 'left';
+var subTitle = "From Wikipedia, the free encyclopedia";
 
 /* Article template */
 var templateHtml = function(){/*
@@ -51,7 +52,7 @@ var templateHtml = function(){/*
     <div id="content" style="margin: 0px; border-width: 0px;">
       <a id="top"></a>
       <h1 id="firstHeading" class="firstHeading" style="margin-bottom: 0.5em; background-color: white;"></h1>
-      <div style="font-size: smaller; margin-top: -1em;">From Wikipedia, the free encyclopedia</div>
+      <div id="siteSub" style="font-size: smaller; margin-top: -1em;"></div>
       <div id="bodyContent">
         <div id="mw-content-text" style="padding-top: 1em;">
         </div>
@@ -82,14 +83,15 @@ process.on('uncaughtException', function (err) {
     console.error('Caught exception: ' + err);
 });
 
-/* Retrieve the article and redirect Ids */
-getArticleIds();
-//getRedirectIds();
-
 /* Initialization */
+getSubTitle();
 createDirectories();
 saveJavascript();
 saveStylesheet();
+
+/* Retrieve the article and redirect Ids */
+getArticleIds();
+//getRedirectIds();
 
 /* Save to the disk */
 saveArticles();
@@ -669,4 +671,13 @@ function getArticleBase( articleId ) {
     var dirBase = filename.replace( /\./g, '_');
     return htmlDirectory + '/' + ( dirBase[0] || '_' ) + '/' + ( dirBase[1] || '_' ) + '/' + 
 	( dirBase[2] || '_' ) + '/' + ( dirBase[3] || '_' ) + '/' + filename + '.html';
+}
+
+function getSubTitle() {
+    console.info( 'Getting sub-title...' );
+    request( webUrl, function( error, response, html ) {
+	    var doc = domino.createDocument( html );
+	    var subTitleNode = doc.getElementById( 'siteSub' );
+	    subTitle = subTitleNode.innerHTML;
+	});
 }
