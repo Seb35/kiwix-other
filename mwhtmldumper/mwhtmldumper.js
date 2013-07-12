@@ -88,6 +88,7 @@ getSubTitle();
 createDirectories();
 saveJavascript();
 saveStylesheet();
+saveFavicon();
 
 /* Retrieve the article and redirect Ids */
 getArticleIds();
@@ -683,4 +684,10 @@ function getSubTitle() {
 	    var subTitleNode = doc.getElementById( 'siteSub' );
 	    subTitle = subTitleNode.innerHTML;
 	});
+}
+
+function saveFavicon() {
+    console.info( 'Saving favicon.png...' );
+    console.log( rootPath + mediaDirectory + '/favicon.png');
+    downloadFile( 'http://sourceforge.net/p/kiwix/tools/ci/master/tree/dumping_tools/data/wikipedia-icon-48x48.png?format=raw', rootPath + mediaDirectory + '/favicon.png' );
 }
