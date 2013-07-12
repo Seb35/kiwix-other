@@ -52,7 +52,7 @@ var templateHtml = function(){/*
     <div id="content" style="margin: 0px; border-width: 0px;">
       <a id="top"></a>
       <h1 id="firstHeading" class="firstHeading" style="margin-bottom: 0.5em; background-color: white;"></h1>
-      <div id="siteSub" style="font-size: smaller; margin-top: -1em;"></div>
+      <div id="ss" style="font-size: smaller; margin-top: -1em;"></div>
       <div id="bodyContent">
         <div id="mw-content-text" style="padding-top: 1em;">
         </div>
@@ -363,6 +363,9 @@ function saveArticle( articleId, html ) {
 	    }
 	});
     }
+
+    /* Set sub-title */
+    doc.getElementById( 'ss' ).innerHTML = subTitle;
 
     /* Append footer node */
     doc.getElementById( 'mw-content-text' ).appendChild( getFooterNode( doc, articleId ) );
