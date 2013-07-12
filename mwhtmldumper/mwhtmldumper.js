@@ -367,6 +367,10 @@ function saveArticle( articleId, html ) {
 
     /* Write the static html file */
     writeFile( doc.documentElement.outerHTML, getArticlePath( articleId ) );
+
+    /* Clean memory */
+    parsoidDoc = undefined;
+    doc = undefined;
 }
 
 /* Grab and concatenate javascript files */
@@ -466,7 +470,7 @@ function saveStylesheet() {
 function getArticleIds() {
     console.info( 'Getting article ids...' );
     var next = "";
-    var url = undefined;
+    var url;
     do {
 	url = apiUrl + 'action=query&generator=allpages&gapfilterredir=nonredirects&gaplimit=500&gapnamespace=0&format=json&gapcontinue=' + decodeURIComponent( next );
 	var body = loadUrl( url )
@@ -614,8 +618,8 @@ function downloadFile( url, path, force ) {
 	    var tryCount = 0;
 	    do {
 		try {
-		    var request = http.get( url, function(response) {
-			    response.pipe(file);
+		    var request = http.get( url, function( response ) {
+			    response.pipe( file );
 			});
 		    return;
 		} catch ( error ) {
@@ -642,7 +646,7 @@ function getMediaBase( filename ) {
     var parts = mediaRegex.exec( filename );
     var root = parts[2];
 
-    if ( !root) {
+    if ( !root ) {
 	console.error( 'Unable to parse filename \'' + filename + '\'' );
 	process.exit( 1 );
     }
