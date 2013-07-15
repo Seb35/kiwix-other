@@ -12,9 +12,10 @@ var swig = require('swig');
 var httpsync = require('httpsync');
 var jsdom = require("jsdom");
 var sleep = require("sleep");
+//var memwatch = require('memwatch');
 
 /* Increase parallel connection limit */
-http.globalAgent.maxSockets = 10;
+http.globalAgent.maxSockets = 5;
 
 /* Paths */
 var rootPath = 'static/';
@@ -70,8 +71,8 @@ var redirectIds = {};
 var mediaIds = {};
 
 //articleIds['Linux'] = undefined;
-var parsoidUrl = 'http://parsoid.wmflabs.org/sr/';
-var hostUrl = 'http://sr.wikipedia.org/';
+var parsoidUrl = 'http://parsoid.wmflabs.org/as/';
+var hostUrl = 'http://as.wikipedia.org/';
 var webUrl = hostUrl + 'wiki/';
 var apiUrl = hostUrl + 'w/api.php?';
 
@@ -81,7 +82,15 @@ var footerTemplateCode = '';//'<div style="clear:both; background-image:linear-g
 /* Event catchers */
 process.on('uncaughtException', function (err) {
     console.error('Caught exception: ' + err);
+    console.error(err.stack);
 });
+
+/*
+memwatch.on('leak', function(info) {
+	console.error( 'Memory leak: ' + info.reason );
+	process.exit( 1 );
+});
+*/
 
 /* Initialization */
 getSubTitle();
@@ -91,7 +100,9 @@ saveStylesheet();
 saveFavicon();
 
 /* Retrieve the article and redirect Ids */
-getArticleIds();
+//getArticleIds();
+articleIds[ 'বেটুপাত' ] = undefined;
+//articleIds[ 'বিষ্ণুপ্ৰসাদ_ৰাভা' ] = undefined;
 //getRedirectIds();
 
 /* Save to the disk */
@@ -195,7 +206,7 @@ function saveArticle( articleId, html ) {
 
 	    if ( ! href ) {
 		console.log(a.outerHTML);
-		break;
+		//		break;
 		process.exit(1);
 	    }
 
@@ -261,7 +272,7 @@ function saveArticle( articleId, html ) {
 	var image = figure.getElementsByTagName( 'img' )[0];
 	var imageWidth = parseInt( image.getAttribute( 'width' ) );
 
-	if ( figureTypeof === 'mw:Image/Thumb' ) {
+	if ( figureTypeof.indexOf('mw:Image/Thumb') >= 0 ) {
 	    var description = figure.getElementsByTagName( 'figcaption' )[0];
 	    
 	    var thumbDiv = parsoidDoc.createElement( 'div' );
@@ -408,7 +419,8 @@ function saveJavascript() {
 		    if ( url ) {
 			url = getFullUrl( url );
 			console.info( 'Downloading javascript from ' + url );
-			var body = loadUrl( url ).replace( '"//', '"http://' );
+			// var body = loadUrl( url ).replace( '"//', '"http://' );
+			var body = loadUrl( url );
 
 			fs.appendFile( javascriptPath, '\n' + body + '\n', function (err) {} );
 		    } else {
@@ -688,6 +700,5 @@ function getSubTitle() {
 
 function saveFavicon() {
     console.info( 'Saving favicon.png...' );
-    console.log( rootPath + mediaDirectory + '/favicon.png');
     downloadFile( 'http://sourceforge.net/p/kiwix/tools/ci/master/tree/dumping_tools/data/wikipedia-icon-48x48.png?format=raw', rootPath + mediaDirectory + '/favicon.png' );
 }
