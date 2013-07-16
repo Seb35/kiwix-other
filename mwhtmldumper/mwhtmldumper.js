@@ -71,8 +71,8 @@ var redirectIds = {};
 var mediaIds = {};
 
 //articleIds['Linux'] = undefined;
-var parsoidUrl = 'http://parsoid.wmflabs.org/as/';
-var hostUrl = 'http://as.wikipedia.org/';
+var parsoidUrl = 'http://parsoid.wmflabs.org/fr/';
+var hostUrl = 'http://fr.wikipedia.org/';
 var webUrl = hostUrl + 'wiki/';
 var apiUrl = hostUrl + 'w/api.php?';
 
@@ -93,6 +93,7 @@ memwatch.on('leak', function(info) {
 */
 
 /* Initialization */
+getMainPage()
 getSubTitle();
 createDirectories();
 saveJavascript();
@@ -100,8 +101,7 @@ saveStylesheet();
 saveFavicon();
 
 /* Retrieve the article and redirect Ids */
-//getArticleIds();
-articleIds[ 'বেটুপাত' ] = undefined;
+getArticleIds();
 //articleIds[ 'বিষ্ণুপ্ৰসাদ_ৰাভা' ] = undefined;
 //getRedirectIds();
 
@@ -600,7 +600,11 @@ function loadUrl( url ) {
 	try {
 	    var req = httpsync.get({ url : url });
 	    var res = req.end();
-	    return res.data.toString();
+	    if ( res.headers.location ) {
+		return loadUrl( res.headers.location );
+	    } else {
+		return res.data.toString();
+	    }
 	} catch ( error ) {
 	    if ( tryCount++ > 5 ) {
 		console.error( error );
@@ -629,7 +633,7 @@ function downloadFile( url, path, force ) {
 	if ( exists && !force ) {
 	    console.info( path + ' already downloaded, download will be skipped.' );
 	} else {
-	    url = url.replace( /^http\:\/\//, 'http://' );
+	    url = url.replace( /^https\:\/\//, 'http://' );
 	    console.info( 'Downloading ' + url + ' at ' + path + '...' );
 	    createDirectoryRecursively( pathParser.dirname( path ) );
 	    var file = fs.createWriteStream( path );
@@ -701,4 +705,20 @@ function getSubTitle() {
 function saveFavicon() {
     console.info( 'Saving favicon.png...' );
     downloadFile( 'http://sourceforge.net/p/kiwix/tools/ci/master/tree/dumping_tools/data/wikipedia-icon-48x48.png?format=raw', rootPath + mediaDirectory + '/favicon.png' );
+}
+
+function getMainPage() {
+    var body = loadUrl( webUrl );
+    var mainPageRegex = /\"wgPageName\"\:\"(.*?)\"/;
+    var parts = mainPageRegex.exec( body );
+    if ( parts[1] ) {
+	var redirectTemplateCode = '<html><head><meta charset="UTF-8" /><title>{{ title }}</title><meta http-equiv="refresh" content="0; URL={{ target }}"></head><body></body></html>';
+	var tpl = swig.compile( redirectTemplateCode );
+	var html = tpl({ title:  parts[1].replace( /_/g, ' ' ), target : '../' + getArticleBase( parts[1] ) });
+	writeFile( html, rootPath + htmlDirectory + '/index.html' );
+	articleIds[ parts[1] ] = undefined;
+    } else {
+	console.error( "Unable to get the main page" );
+	process.exit( 1 );
+    };
 }
