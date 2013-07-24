@@ -36,7 +36,7 @@ var getRedirectIdsStatus = 0;
 var cssClassBlackList = [ 'noprint', 'ambox', 'stub', 'topicon', 'magnify' ];
 var cssClassBlackListIfNoLink = [ 'mainarticle', 'seealso', 'dablink', 'rellink' ];
 var cssClassCallsBlackList = [ 'plainlinks' ];
-var idBlackList = [ 'purgelink', 'localnotice' ];
+var idBlackList = [ 'purgelink' ];
 var ltr = true;
 var autoAlign = ltr ? 'left' : 'right';
 var revAutoAlign = ltr ? 'right' : 'left';
@@ -69,13 +69,15 @@ var templateHtml = function(){/*
 var templateDoc = domino.createDocument( templateHtml );
 
 /* Input variables */
+var namespaces = {};
 var articleIds = {};
 var redirectIds = {};
 var mediaIds = {};
+var namespaceIds = {};
 
 //articleIds['Linux'] = undefined;
-var parsoidUrl = 'http://parsoid.wmflabs.org/ml/';
-var hostUrl = 'http://ml.wikipedia.org/';
+var parsoidUrl = 'http://parsoid.wmflabs.org/ht/';
+var hostUrl = 'http://ht.wikipedia.org/';
 var webUrl = hostUrl + 'wiki/';
 var apiUrl = hostUrl + 'w/api.php?';
 
@@ -89,6 +91,7 @@ process.on('uncaughtException', function (err) {
 });
 
 /* Initialization */
+getNamespaces();
 getMainPage();
 getSubTitle();
 createDirectories();
@@ -96,6 +99,7 @@ saveJavascript();
 saveStylesheet();
 saveFavicon();
 
+/* Get content */
 async.series([
 	      /* Retrieve the article and redirect Ids */
 	      function(finished) { getArticleIds( finished ) }, 
@@ -106,7 +110,6 @@ async.series([
 	      function(finished) { saveRedirects( finished ) }
 	      ]);
 
-/* Save articles */
 function saveArticles( finished ) {
     Object.keys(articleIds).map( function( articleId ) {
        var articleUrl = parsoidUrl + articleId;
@@ -204,27 +207,25 @@ function saveArticle( html, articleId ) {
 	    /* Remove internal links pointing to no mirrored articles */
 	    else if ( rel.substring( 0, 11 ) === 'mw:WikiLink' ) {
 		var targetId = decodeURIComponent( href.replace(/^\.\//, '') );
-		
-		if ( ! ( targetId in articleIds || targetId in redirectIds ) ) {
+		if ( isMirrored( targetId ) ) {
+		    a.setAttribute( 'href', getArticleUrl( targetId ) );
+		} else {
 		    while ( a.firstChild ) {
 			a.parentNode.insertBefore( a.firstChild, a);
 		    }
 		    a.parentNode.removeChild( a );
-		} else {
-		    a.setAttribute( 'href', getArticleUrl( targetId ) );
 		}
 	    }
 	} else {
 	    if ( href.indexOf( '/wiki/' ) != -1 ) {
 		var targetId = decodeURIComponent( href.replace(/^\/wiki\//, '') );
-		console.info( targetId );
-		if ( ! ( targetId in articleIds || targetId in redirectIds ) ) {
+		if ( isMirrored( targetId ) ) {
+		    a.setAttribute( 'href', getArticleUrl( targetId ) );
+		} else {
 		    while ( a.firstChild ) {
 			a.parentNode.insertBefore( a.firstChild, a);
 		    }
 		    a.parentNode.removeChild( a );
-		} else {
-			a.setAttribute( 'href', getArticleUrl( targetId ) );
 		}
 	    }
 	}
@@ -374,6 +375,20 @@ function saveArticle( html, articleId ) {
     doc = undefined;
 }
 
+function isMirrored( id ) {
+    var namespaceNumber = 0;
+
+    if ( id.indexOf(':') >= 0 ) {
+	var tmpNamespace = id.substring( 0, id.indexOf(':') ).replace( / /g, '_');
+	var tmpNamespaceNumber = namespaces[tmpNamespace];
+	if ( tmpNamespaceNumber && tmpNamespaceNumber in namespaceIds ) {
+	    return true;
+	}
+    }
+    
+    return ( id in articleIds || id in redirectIds );
+}
+
 /* Grab and concatenate javascript files */
 function saveJavascript() {
     console.info( 'Creating javascript...' );
@@ -473,7 +488,7 @@ function getArticleIds( finished ) {
     var url;
     do {
 	url = apiUrl + 'action=query&generator=allpages&gapfilterredir=nonredirects&gaplimit=500&gapnamespace=0&format=json&gapcontinue=' + decodeURIComponent( next );
-	var body = loadUrlSync( url )
+	var body = loadUrlSync( url );
 	var entries = JSON.parse( body )['query']['pages'];
 	Object.keys(entries).map( function( key ) {
 	    var entry = entries[key];
@@ -560,7 +575,7 @@ function concatenateToAttribute( old, add ) {
 
 function getFooterNode( doc, articleId ) {
     var escapedArticleId = encodeURIComponent( articleId );
-    var div = doc.createElement('div');
+    var div = doc.createElement( 'div' );
     var tpl = swig.compile( footerTemplateCode );
     div.innerHTML = tpl({ articleId: escapedArticleId, webUrl: webUrl });
     return div;
@@ -569,16 +584,16 @@ function getFooterNode( doc, articleId ) {
 function writeFile( data, path ) {
     console.info( 'Writing ' + path + '...' );
     
-    if (pathParser.dirname( path ).indexOf('./') >= 0) {
-	console.error( "Wrong path " + path );
+    if ( pathParser.dirname( path ).indexOf('./') >= 0 ) {
+	console.error( 'Wrong path ' + path );
 	process.exit( 1 );
     }
 
     createDirectoryRecursively( pathParser.dirname( path ) );
     fs.writeFile( path, data, function( error ) {
-	if (error) {
+	if ( error ) {
 	    throw error;
-	    process.exit(1);
+	    process.exit( 1 );
 	}
     });
 }
@@ -731,4 +746,40 @@ function getMainPage() {
 	console.error( "Unable to get the main page" );
 	process.exit( 1 );
     };
+}
+
+function getNamespaces() {
+    var url = apiUrl + 'action=query&meta=siteinfo&siprop=namespaces|namespacealiases&format=json';
+    var body = loadUrlSync( url );
+    var types = [ 'namespaces', 'namespacealiases'];
+    types.map( function( type ) {
+	var entries = JSON.parse( body )['query'][type];
+	Object.keys(entries).map( function( key ) {
+	   var entry = entries[key];
+	   var name = entry['*'].replace( / /g, '_');
+	   if ( name ) {
+	       var number =  entry['id'];
+	       namespaces[ lcFirst( name ) ] = number;
+	       namespaces[ ucFirst( name ) ] = number;
+
+	       var canonical = entry['canonical'] ? entry['canonical'].replace( / /g, '_' ) : '';
+	       if ( canonical ) {
+		   namespaces[ lcFirst( canonical ) ] = number;
+		   namespaces[ ucFirst( canonical ) ] = number;
+	       }
+	   }
+        });
+    });
+}
+
+function lcFirst( str ) {
+    str += '';
+    var f = str.charAt( 0 ).toLowerCase();
+    return f + str.substr( 1 );
+}
+
+function ucFirst( str ) {
+    str += '';
+    var f = str.charAt( 0 ).toUpperCase();
+    return f + str.substr( 1 );
 }
