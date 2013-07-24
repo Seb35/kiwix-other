@@ -15,7 +15,7 @@ var sleep = require("sleep");
 //var memwatch = require('memwatch');
 
 /* Increase parallel connection limit */
-http.globalAgent.maxSockets = 5;
+http.globalAgent.maxSockets = 3;
 
 /* Paths */
 var rootPath = 'static/';
@@ -71,8 +71,8 @@ var redirectIds = {};
 var mediaIds = {};
 
 //articleIds['Linux'] = undefined;
-var parsoidUrl = 'http://parsoid.wmflabs.org/fr/';
-var hostUrl = 'http://fr.wikipedia.org/';
+var parsoidUrl = 'http://parsoid.wmflabs.org/ml/';
+var hostUrl = 'http://ml.wikipedia.org/';
 var webUrl = hostUrl + 'wiki/';
 var apiUrl = hostUrl + 'w/api.php?';
 
@@ -102,8 +102,7 @@ saveFavicon();
 
 /* Retrieve the article and redirect Ids */
 getArticleIds();
-//articleIds[ 'বিষ্ণুপ্ৰসাদ_ৰাভা' ] = undefined;
-//getRedirectIds();
+getRedirectIds();
 
 /* Save to the disk */
 saveArticles();
@@ -400,37 +399,35 @@ function saveJavascript() {
 	MutationEvents           : '2.0',
     }
 
-    request( webUrl, function( error, response, html ) {
-	html = html.replace( '<head>', '<head><base href="' + hostUrl + '" />');
-	var window = jsdom.jsdom( html ).createWindow();
-
-	window.addEventListener('load', function () {
-	    var nodeNames = [ 'head', 'body' ];
-	    nodeNames.map( function( nodeName ) {
-		var node = window.document.getElementsByTagName( nodeName )[0];
-		var scripts = node.getElementsByTagName( 'script' );
-		var javascriptPath = rootPath + javascriptDirectory + '/' + nodeName + '.js';
-		
-		fs.unlink( javascriptPath, function() {} );
-		for ( var i = 0; i < scripts.length ; i++ ) {
-		    var script = scripts[i];
-		    var url = script.getAttribute( 'src' );
-		    
-		    if ( url ) {
-			url = getFullUrl( url );
-			console.info( 'Downloading javascript from ' + url );
-			// var body = loadUrl( url ).replace( '"//', '"http://' );
-			var body = loadUrl( url );
-
-			fs.appendFile( javascriptPath, '\n' + body + '\n', function (err) {} );
-		    } else {
-			fs.appendFile( javascriptPath, '\n' + script.innerHTML + '\n', function (err) {} );
-		    }
-		}
-	    });
-	});
+    var html = loadUrl( webUrl );
+    html = html.replace( '<head>', '<head><base href="' + hostUrl + '" />');
+    var window = jsdom.jsdom( html ).createWindow();
+    
+    window.addEventListener('load', function () {
+      var nodeNames = [ 'head', 'body' ];
+      nodeNames.map( function( nodeName ) {
+        var node = window.document.getElementsByTagName( nodeName )[0];
+	var scripts = node.getElementsByTagName( 'script' );
+	var javascriptPath = rootPath + javascriptDirectory + '/' + nodeName + '.js';
+	
+	fs.unlink( javascriptPath, function() {} );
+	for ( var i = 0; i < scripts.length ; i++ ) {
+	  var script = scripts[i];
+	  var url = script.getAttribute( 'src' );
+	  
+	  if ( url ) {
+	    url = getFullUrl( url );
+	    console.info( 'Downloading javascript from ' + url );
+	    // var body = loadUrl( url ).replace( '"//', '"http://' );
+	    var body = loadUrl( url );
+	    
+	    fs.appendFile( javascriptPath, '\n' + body + '\n', function (err) {} );
+	  } else {
+	      fs.appendFile( javascriptPath, '\n' + script.innerHTML + '\n', function (err) {} );
+	  }
+	}
     });
-
+   });
 }
 
 /* Grab and concatenate stylesheet files */
@@ -502,18 +499,18 @@ function getArticleIds() {
 }
 
 function getRedirectIds() {
-    Object.keys(articleIds).map( function( articleId ) {
-	console.info( 'Getting redirect ids...' );
-	var url = apiUrl + 'action=query&list=backlinks&blfilterredir=redirects&bllimit=500&format=json&bltitle=' + 
-	    decodeURIComponent( articleId );
-	var body = loadUrl( url );
-	var entries = JSON.parse( body )['query']['backlinks'];
-	entries.map( function( entry ) {
-	    redirectIds[entry['title'].replace( / /g, '_' )] = articleId;
-	});
-    });
+   Object.keys(articleIds).map( function( articleId ) {
+       console.info( 'Getting redirect ids...' );
+       var url = apiUrl + 'action=query&list=backlinks&blfilterredir=redirects&bllimit=500&format=json&bltitle=' + 
+	   decodeURIComponent( articleId );
+       var body = loadUrl( url );
+       var entries = JSON.parse( body )['query']['backlinks'];
+       entries.map( function( entry ) {
+	       redirectIds[entry['title'].replace( / /g, '_' )] = articleId;
+       });
+  });
 }
-
+5A
 /* Create directories for static files */
 function createDirectories() {
     console.info( 'Creating directories at \'' + rootPath + '\'...' );
@@ -601,6 +598,7 @@ function loadUrl( url ) {
 	    var req = httpsync.get({ url : url });
 	    var res = req.end();
 	    if ( res.headers.location ) {
+		console.info( "Redirect detected, load " + res.headers.location );
 		return loadUrl( res.headers.location );
 	    } else {
 		return res.data.toString();
@@ -695,11 +693,10 @@ function getArticleBase( articleId ) {
 
 function getSubTitle() {
     console.info( 'Getting sub-title...' );
-    request( webUrl, function( error, response, html ) {
-	    var doc = domino.createDocument( html );
-	    var subTitleNode = doc.getElementById( 'siteSub' );
-	    subTitle = subTitleNode.innerHTML;
-	});
+    var html = loadUrl( webUrl );
+    var doc = domino.createDocument( html );
+    var subTitleNode = doc.getElementById( 'siteSub' );
+    subTitle = subTitleNode.innerHTML;
 }
 
 function saveFavicon() {
