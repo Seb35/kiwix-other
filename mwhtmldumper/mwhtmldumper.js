@@ -12,10 +12,10 @@ var swig = require('swig');
 var httpsync = require('httpsync');
 var jsdom = require("jsdom");
 var sleep = require("sleep");
-//var memwatch = require('memwatch');
+var async = require("async");
 
 /* Increase parallel connection limit */
-http.globalAgent.maxSockets = 3;
+http.globalAgent.maxSockets = 6;
 
 /* Paths */
 var rootPath = 'static/';
@@ -29,11 +29,14 @@ var withCategories = false;
 var withMedias = true;
 var mediaRegex = /^(\d+px-|)(.*?)(\.[A-Za-z0-9]{2,6})(\.[A-Za-z0-9]{2,6}|)$/;
 
+/* Control */
+var getRedirectIdsStatus = 0;
+
 /* Content specific */
 var cssClassBlackList = [ 'noprint', 'ambox', 'stub', 'topicon', 'magnify' ];
 var cssClassBlackListIfNoLink = [ 'mainarticle', 'seealso', 'dablink', 'rellink' ];
 var cssClassCallsBlackList = [ 'plainlinks' ];
-var idBlackList = [ 'purgelink' ];
+var idBlackList = [ 'purgelink', 'localnotice' ];
 var ltr = true;
 var autoAlign = ltr ? 'left' : 'right';
 var revAutoAlign = ltr ? 'right' : 'left';
@@ -85,56 +88,37 @@ process.on('uncaughtException', function (err) {
     console.error(err.stack);
 });
 
-/*
-memwatch.on('leak', function(info) {
-	console.error( 'Memory leak: ' + info.reason );
-	process.exit( 1 );
-});
-*/
-
 /* Initialization */
-getMainPage()
+getMainPage();
 getSubTitle();
 createDirectories();
 saveJavascript();
 saveStylesheet();
 saveFavicon();
 
-/* Retrieve the article and redirect Ids */
-getArticleIds();
-getRedirectIds();
+async.series([
+	      /* Retrieve the article and redirect Ids */
+	      function(finished) { getArticleIds( finished ) }, 
+	      function(finished) { getRedirectIds( finished ) },
 
-/* Save to the disk */
-saveArticles();
-saveRedirects();
+	      /* Save to the disk */
+	      function(finished) { saveArticles( finished ) },
+	      function(finished) { saveRedirects( finished ) }
+	      ]);
 
 /* Save articles */
-function saveArticles() {
+function saveArticles( finished ) {
     Object.keys(articleIds).map( function( articleId ) {
-	var articleUrl = parsoidUrl + articleId;
+       var articleUrl = parsoidUrl + articleId;
 	console.info( 'Downloading article from ' + articleUrl + '...' );
-	var tryCount = 0;
-	do {
-	    try {
-		request( articleUrl, function( error, response, body ) {
-			if ( error || !body ) {
-			    throw error;
-			} else {
-			    saveArticle( articleId, body );
-			}
-		    });
-		break;
-	    } catch ( error ) {
-		if ( tryCount++ > 5 ) {
-		    console.error( "Unable to retrieve '" + articleId + "'" );
-		    process.exit( 1 );
-		}
-	    }
-	} while ( true );
+	loadUrlAsync( articleUrl, function( html, articleId ) {
+		saveArticle( html, articleId );
+        }, articleId);
     });
+    finished();
 }
 
-function saveRedirects() {
+function saveRedirects( finished ) {
     console.log("Saving redirects...");
     var redirectTemplateCode = '<html><head><meta charset="UTF-8" /><title>{{ title }}</title><meta http-equiv="refresh" content="0; URL={{ target }}"></head><body></body></html>';
     var tpl = swig.compile( redirectTemplateCode );
@@ -142,9 +126,10 @@ function saveRedirects() {
 	var html = tpl({ title: redirectId.replace( /_/g, ' ' ), target : getArticleUrl( redirectIds[ redirectId ] ) });
 	writeFile( html, getArticlePath( redirectId ) );
     });
+    finished();
 }
 
-function saveArticle( articleId, html ) {
+function saveArticle( html, articleId ) {
     console.info( 'Parsing HTML/RDF of ' + articleId + '...' );
     var parsoidDoc = domino.createDocument( html );
 
@@ -399,7 +384,7 @@ function saveJavascript() {
 	MutationEvents           : '2.0',
     }
 
-    var html = loadUrl( webUrl );
+    var html = loadUrlSync( webUrl );
     html = html.replace( '<head>', '<head><base href="' + hostUrl + '" />');
     var window = jsdom.jsdom( html ).createWindow();
     
@@ -418,8 +403,8 @@ function saveJavascript() {
 	  if ( url ) {
 	    url = getFullUrl( url );
 	    console.info( 'Downloading javascript from ' + url );
-	    // var body = loadUrl( url ).replace( '"//', '"http://' );
-	    var body = loadUrl( url );
+	    // var body = loadUrlSync( url ).replace( '"//', '"http://' );
+	    var body = loadUrlSync( url );
 	    
 	    fs.appendFile( javascriptPath, '\n' + body + '\n', function (err) {} );
 	  } else {
@@ -482,13 +467,13 @@ function saveStylesheet() {
 }
 
 /* Get ids */
-function getArticleIds() {
+function getArticleIds( finished ) {
     console.info( 'Getting article ids...' );
     var next = "";
     var url;
     do {
 	url = apiUrl + 'action=query&generator=allpages&gapfilterredir=nonredirects&gaplimit=500&gapnamespace=0&format=json&gapcontinue=' + decodeURIComponent( next );
-	var body = loadUrl( url )
+	var body = loadUrlSync( url )
 	var entries = JSON.parse( body )['query']['pages'];
 	Object.keys(entries).map( function( key ) {
 	    var entry = entries[key];
@@ -496,21 +481,28 @@ function getArticleIds() {
 	});
 	next = JSON.parse( body )['query-continue'] ? JSON.parse( body )['query-continue']['allpages']['gapcontinue'] : undefined;
     } while ( next );
+    finished();
 }
 
-function getRedirectIds() {
+function getRedirectIds( finished ) {
    Object.keys(articleIds).map( function( articleId ) {
-       console.info( 'Getting redirect ids...' );
        var url = apiUrl + 'action=query&list=backlinks&blfilterredir=redirects&bllimit=500&format=json&bltitle=' + 
 	   decodeURIComponent( articleId );
-       var body = loadUrl( url );
-       var entries = JSON.parse( body )['query']['backlinks'];
-       entries.map( function( entry ) {
-	       redirectIds[entry['title'].replace( / /g, '_' )] = articleId;
-       });
+       getRedirectIdsStatus += 1;
+       loadUrlAsync( url, function( body, articleId ) {
+	       var entries = JSON.parse( body )['query']['backlinks'];
+	       entries.map( function( entry ) {
+		  redirectIds[entry['title'].replace( / /g, '_' )] = articleId;
+	       });
+	       getRedirectIdsStatus -= 1;
+	       console.log( "getRedirectIdsStatus=" + getRedirectIdsStatus );
+	       if ( getRedirectIdsStatus == 0 ) {
+		   finished();
+	       }
+       }, articleId );
   });
 }
-5A
+
 /* Create directories for static files */
 function createDirectories() {
     console.info( 'Creating directories at \'' + rootPath + '\'...' );
@@ -591,7 +583,7 @@ function writeFile( data, path ) {
     });
 }
 
-function loadUrl( url ) {
+function loadUrlSync( url ) {
     var tryCount = 0;
     do {
 	try {
@@ -599,13 +591,34 @@ function loadUrl( url ) {
 	    var res = req.end();
 	    if ( res.headers.location ) {
 		console.info( "Redirect detected, load " + res.headers.location );
-		return loadUrl( res.headers.location );
+		return loadUrlSync( res.headers.location );
 	    } else {
 		return res.data.toString();
 	    }
 	} catch ( error ) {
 	    if ( tryCount++ > 5 ) {
 		console.error( error );
+		process.exit( 1 );
+	    }
+	}
+    } while ( true );
+}
+
+function loadUrlAsync( url, callback, var1, var2, var3 ) {
+    var tryCount = 0;
+    do {
+	try {
+	    request( url, function( error, response, body ) {
+		    if ( error || !body ) {
+			throw error;
+		    } else {
+			callback( body, var1, var2, var3 );
+		    }
+		});
+	    break;
+	} catch ( error ) {
+	    if ( tryCount++ > 5 ) {
+		console.error( "Unable to retrieve '" + url + "'" );
 		process.exit( 1 );
 	    }
 	}
@@ -693,7 +706,7 @@ function getArticleBase( articleId ) {
 
 function getSubTitle() {
     console.info( 'Getting sub-title...' );
-    var html = loadUrl( webUrl );
+    var html = loadUrlSync( webUrl );
     var doc = domino.createDocument( html );
     var subTitleNode = doc.getElementById( 'siteSub' );
     subTitle = subTitleNode.innerHTML;
@@ -705,7 +718,7 @@ function saveFavicon() {
 }
 
 function getMainPage() {
-    var body = loadUrl( webUrl );
+    var body = loadUrlSync( webUrl );
     var mainPageRegex = /\"wgPageName\"\:\"(.*?)\"/;
     var parts = mainPageRegex.exec( body );
     if ( parts[1] ) {
