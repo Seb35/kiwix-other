@@ -15,7 +15,7 @@ var sleep = require("sleep");
 var async = require("async");
 
 /* Increase parallel connection limit */
-http.globalAgent.maxSockets = 6;
+http.globalAgent.maxSockets = 10;
 
 /* Paths */
 var rootPath = 'static/';
@@ -30,7 +30,8 @@ var withMedias = true;
 var mediaRegex = /^(\d+px-|)(.*?)(\.[A-Za-z0-9]{2,6})(\.[A-Za-z0-9]{2,6}|)$/;
 
 /* Control */
-var getRedirectIdsStatus = 0;
+var concurrentGetRedirectIdsRequests = 0;
+var concurrentDownloadFileRequests = 0;
 
 /* Content specific */
 var cssClassBlackList = [ 'noprint', 'ambox', 'stub', 'topicon', 'magnify' ];
@@ -71,18 +72,19 @@ var templateDoc = domino.createDocument( templateHtml );
 /* Input variables */
 var namespaces = {};
 var articleIds = {};
+//articleIds['Biskupin'] = undefined;
 var redirectIds = {};
 var mediaIds = {};
 var namespaceIds = {};
 
 //articleIds['Linux'] = undefined;
-var parsoidUrl = 'http://parsoid.wmflabs.org/ht/';
-var hostUrl = 'http://ht.wikipedia.org/';
+var parsoidUrl = 'http://parsoid.wmflabs.org/enwikivoyage/';
+var hostUrl = 'http://en.wikivoyage.org/';
 var webUrl = hostUrl + 'wiki/';
 var apiUrl = hostUrl + 'w/api.php?';
 
 /* Footer */
-var footerTemplateCode = '';//'<div style="clear:both; background-image:linear-gradient(180deg, #E8E8E8, white); border-top: dashed 2px #AAAAAA; padding: 0.5em 0.5em 2em 0.5em; margin-top: 1em;">Diese Seite kommt von <a class="external text" href="{{ webUrl }}{{ articleId }}">Wikipedia</a>. Der Text ist unter der Lizenz „<a class="external text" href="https://de.wikipedia.org/wiki/Wikipedia:Lizenzbestimmungen_Commons_Attribution-ShareAlike_3.0_Unported">Creative Commons Attribution/Share Alike</a>“ verfügbar; zusätzliche Bedingungen können anwendbar sein. Einzelheiten sind in den Nutzungsbedingungen beschrieben.</div>';
+var footerTemplateCode = '<div style="clear:both; background-image:linear-gradient(180deg, #E8E8E8, white); border-top: dashed 2px #AAAAAA; padding: 0.5em 0.5em 2em 0.5em; margin-top: 1em;">This article is issued from <a class="external text" href="{{ webUrl }}{{ articleId }}">Wikivoyage</a>. The text is available under the <a class="external text" href="http://creativecommons.org/licenses/by-sa/3.0/">Creative Commons Attribution/Share Alike</a>; additional terms may apply for the media files.</div>';
 
 /* Event catchers */
 process.on('uncaughtException', function (err) {
@@ -111,14 +113,32 @@ async.series([
 	      ]);
 
 function saveArticles( finished ) {
-    Object.keys(articleIds).map( function( articleId ) {
-       var articleUrl = parsoidUrl + articleId;
-	console.info( 'Downloading article from ' + articleUrl + '...' );
-	loadUrlAsync( articleUrl, function( html, articleId ) {
-		saveArticle( html, articleId );
-        }, articleId);
+    console.log("Saving articles...");
+    async.eachLimit(Object.keys(articleIds), 10, saveArticlesCallback, function( err ) {
+	if (err) {
+	    console.error( 'Error in saveArticles callback: ' + err );
+	}
     });
+
     finished();
+}
+
+function saveArticlesCallback( articleId, finished ) {
+   var articlePath = getArticlePath( articleId );
+   fs.exists( articlePath, function (exists) {
+       if ( !exists ) {
+           var articleUrl = parsoidUrl + articleId;
+           console.info( 'Downloading article from ' + articleUrl + ' at ' + articlePath + '...' );
+           loadUrlAsync( articleUrl, function( html, articleId ) {
+	       saveArticle( html, articleId );
+	       finished();
+           }, articleId);
+	   finished();
+       } else {
+           console.info( articleId + ' already downloaded at ' + articlePath );
+	   finished();
+       }
+   });
 }
 
 function saveRedirects( finished ) {
@@ -483,10 +503,10 @@ function saveStylesheet() {
 
 /* Get ids */
 function getArticleIds( finished ) {
-    console.info( 'Getting article ids...' );
     var next = "";
     var url;
     do {
+	console.info( 'Getting article ids' + ( next ? ' (from ' + next + ')' : '' ) + '...' );
 	url = apiUrl + 'action=query&generator=allpages&gapfilterredir=nonredirects&gaplimit=500&gapnamespace=0&format=json&gapcontinue=' + decodeURIComponent( next );
 	var body = loadUrlSync( url );
 	var entries = JSON.parse( body )['query']['pages'];
@@ -501,17 +521,16 @@ function getArticleIds( finished ) {
 
 function getRedirectIds( finished ) {
    Object.keys(articleIds).map( function( articleId ) {
-       var url = apiUrl + 'action=query&list=backlinks&blfilterredir=redirects&bllimit=500&format=json&bltitle=' + 
-	   decodeURIComponent( articleId );
-       getRedirectIdsStatus += 1;
+       var url = apiUrl + 'action=query&list=backlinks&blfilterredir=redirects&bllimit=500&format=json&bltitle=' + decodeURIComponent( articleId );
+       concurrentGetRedirectIdsRequests += 1;
        loadUrlAsync( url, function( body, articleId ) {
 	       var entries = JSON.parse( body )['query']['backlinks'];
 	       entries.map( function( entry ) {
 		  redirectIds[entry['title'].replace( / /g, '_' )] = articleId;
 	       });
-	       getRedirectIdsStatus -= 1;
-	       console.log( "getRedirectIdsStatus=" + getRedirectIdsStatus );
-	       if ( getRedirectIdsStatus == 0 ) {
+	       concurrentGetRedirectIdsRequests -= 1;
+	      // console.log( "concurrentGetRedirectIdsRequests=" + concurrentGetRedirectIdsRequests );
+	       if ( concurrentGetRedirectIdsRequests == 0 ) {
 		   finished();
 	       }
        }, articleId );
@@ -666,8 +685,11 @@ function downloadFile( url, path, force ) {
 	    var tryCount = 0;
 	    do {
 		try {
+		    console.log( "concurrentDownloadFileRequests=" + concurrentDownloadFileRequests );
+		    concurrentDownloadFileRequests++;
 		    var request = http.get( url, function( response ) {
-			    response.pipe( file );
+			response.pipe( file );
+			concurrentDownloadFileRequests--;
 			});
 		    return;
 		} catch ( error ) {
@@ -782,4 +804,31 @@ function ucFirst( str ) {
     str += '';
     var f = str.charAt( 0 ).toUpperCase();
     return f + str.substr( 1 );
+}
+
+/* Others */
+function addFooter( finished ) {
+    console.log("Adding footers...");
+    async.eachLimit(Object.keys(articleIds), 10, addFooterCallback, function( err ) {
+	if (err) {
+	    console.error( 'Error in adding footer callback: ' + err );
+	}
+    });
+
+    finished();
+}
+
+function addFooterCallback( articleId, finished ) {
+   var articlePath = getArticlePath( articleId );
+    console.log( 'Adding footer to ' + articlePath );
+    fs.readFile(articlePath, 'utf8',  function (err,data) {
+	if (err) {
+	    console.log(err);
+	    return finished();
+	}
+	var doc = domino.createDocument( data );
+	doc.getElementById( 'mw-content-text' ).appendChild( getFooterNode( doc, articleId ) );
+        writeFile( doc.documentElement.outerHTML, articlePath );
+	finished();
+    });
 }
