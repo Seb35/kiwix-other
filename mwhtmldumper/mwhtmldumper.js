@@ -172,6 +172,12 @@ function saveArticle( html, articleId ) {
 	    };
     });
 
+    /* Remove useless input nodes */
+    var inputNodes = parsoidDoc.getElementsByTagName( 'input' );
+    for ( var i = 0; i < inputNodes.length ; i++ ) {
+	deleteNode( inputNodes[i] );
+    }
+
     /* Go through all images */
     var imgs = parsoidDoc.getElementsByTagName( 'img' );
     for ( var i = 0; i < imgs.length ; i++ ) {
@@ -274,7 +280,7 @@ function saveArticle( html, articleId ) {
 	var image = figure.getElementsByTagName( 'img' )[0];
 	var imageWidth = parseInt( image.getAttribute( 'width' ) );
 
-	if ( figureTypeof.indexOf('mw:Image/Thumb') >= 0 ) {
+	if ( figureTypeof.indexOf( 'mw:Image/Thumb' ) >= 0 ) {
 	    var description = figure.getElementsByTagName( 'figcaption' )[0];
 	    
 	    var thumbDiv = parsoidDoc.createElement( 'div' );
@@ -306,7 +312,7 @@ function saveArticle( html, articleId ) {
 	    thumbDiv.appendChild( thumbinnerDiv );
 	    
 	    figure.parentNode.replaceChild(thumbDiv, figure);
-	} else if ( figureTypeof === 'mw:Image' ) {
+	} else if ( figureTypeof.indexOf( 'mw:Image' ) >= 0 ) {
 	    var div = parsoidDoc.createElement( 'div' );
 	    if ( figureClass.search( 'mw-halign-right' ) >= 0 ) {
 		div.setAttribute( 'class', concatenateToAttribute( div.getAttribute( 'class' ), 'floatright' ) );
