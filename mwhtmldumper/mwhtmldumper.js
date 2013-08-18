@@ -11,7 +11,6 @@ var http = require('follow-redirects').http;
 var swig = require('swig');
 var httpsync = require('httpsync');
 var jsdom = require("jsdom");
-var sleep = require("sleep");
 var async = require("async");
 
 /* Increase parallel connection limit */
@@ -71,7 +70,6 @@ var templateHtml = function(){/*
   </body>
 </html>
 */}.toString().slice(14,-3);
-var templateDoc = domino.createDocument( templateHtml );
 
 /* Input variables */
 var namespaces = {};
@@ -80,8 +78,8 @@ var redirectIds = {};
 var mediaIds = {};
 var namespaceIds = {};
 
-var parsoidUrl = 'http://parsoid.wmflabs.org/te/';
-var hostUrl = 'http://te.wikipedia.org/';
+var parsoidUrl = 'http://parsoid.wmflabs.org/ko/';
+var hostUrl = 'http://ko.wikipedia.org/';
 var webUrl = hostUrl + 'wiki/';
 var apiUrl = hostUrl + 'w/api.php?';
 
@@ -351,7 +349,7 @@ function saveArticle( html, articleId ) {
     });
 
     /* Create final document by merging template and parsoid documents */
-    var doc = templateDoc;
+    var doc = domino.createDocument( templateHtml );
     var contentNode = doc.getElementById( 'mw-content-text' );
     contentNode.innerHTML = parsoidDoc.getElementsByTagName( 'body' )[0].innerHTML;
     var contentTitleNode = doc.getElementById( 'firstHeading' );
