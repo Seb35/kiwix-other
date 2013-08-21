@@ -78,8 +78,8 @@ var redirectIds = {};
 var mediaIds = {};
 var namespaceIds = {};
 
-var parsoidUrl = 'http://parsoid.wmflabs.org/ko/';
-var hostUrl = 'http://ko.wikipedia.org/';
+var parsoidUrl = 'http://parsoid.wmflabs.org/zh/';
+var hostUrl = 'http://zh.wikipedia.org/';
 var webUrl = hostUrl + 'wiki/';
 var apiUrl = hostUrl + 'w/api.php?';
 
@@ -183,7 +183,7 @@ function saveArticle( html, articleId ) {
     for ( var i = 0; i < imgs.length ; i++ ) {
 	var img = imgs[i];
 	var src = getFullUrl( img.getAttribute( 'src' ) );
-	var filename = decodeURIComponent( pathParser.basename( urlParser.parse( src ).pathname ) );
+	var filename = decodeURI( pathParser.basename( urlParser.parse( src ).pathname ) );
 
 	/* Download image */
 	downloadMedia( src, filename );
@@ -195,9 +195,20 @@ function saveArticle( html, articleId ) {
 	img.removeAttribute( 'resource' ); 
 
 	/* Remove image link */
-	var linkNode = img.parentNode
-	if ( linkNode.tagName === 'A' ) {
-	    linkNode.parentNode.replaceChild( img, linkNode );
+	var linkNode = img.parentNode;
+	if ( linkNode.tagName === 'A') {
+
+	    /* Under certain condition it seems that this is possible
+	     * to have parentNode == undefined, in this case this
+	     * seems preferable to remove the whole link+content than
+	     * keeping a wrong link. See for example this url
+	     * http://parsoid.wmflabs.org/ko/%EC%9D%B4%ED%9C%98%EC%86%8C */
+
+	    if ( linkNode.parentNode ) {
+		linkNode.parentNode.replaceChild( img, linkNode );
+	    } else {
+		deleteNode( img );
+	    }
 	}
     }
 
@@ -229,7 +240,7 @@ function saveArticle( html, articleId ) {
 
 	    /* Remove internal links pointing to no mirrored articles */
 	    else if ( rel.substring( 0, 11 ) === 'mw:WikiLink' ) {
-		var targetId = decodeURIComponent( href.replace(/^\.\//, '') );
+		var targetId = decodeURI( href.replace(/^\.\//, '') );
 		if ( isMirrored( targetId ) ) {
 		    a.setAttribute( 'href', getArticleUrl( targetId ) );
 		} else {
@@ -241,7 +252,7 @@ function saveArticle( html, articleId ) {
 	    }
 	} else {
 	    if ( href.indexOf( '/wiki/' ) != -1 ) {
-		var targetId = decodeURIComponent( href.replace(/^\/wiki\//, '') );
+		var targetId = decodeURI( href.replace(/^\/wiki\//, '') );
 		if ( isMirrored( targetId ) ) {
 		    a.setAttribute( 'href', getArticleUrl( targetId ) );
 		} else {
@@ -670,7 +681,6 @@ function loadUrlAsync( url, callback, var1, var2, var3 ) {
 	    return nok;
 	},
 	function( finished ) {
-	    tryCount += 1;
 	    var request = http.get( url, function( response ) {
 		data = '';
 		response.setEncoding( 'utf8' );
@@ -691,7 +701,7 @@ function loadUrlAsync( url, callback, var1, var2, var3 ) {
 	    if ( error ) {
 		console.error( 'Error (' + tryCount + ') by retrieving from url ' + url );
 		console.error( error )
-		if ( tryCount > 5 ) {
+		if ( tryCount++ > 5 ) {
 		    console.error( 'Unable to retrieve ' + url + ' at ' + path );
 		    process.exit( 1 );
 		}
@@ -735,7 +745,6 @@ function downloadFile( url, path, force ) {
 		    return nok;
 		},
 		function( finished ) {
-		    tryCount += 1;
 		    var request = http.get( url, function( response ) {
 			response.pipe( file );
 			nok = false;
@@ -750,7 +759,7 @@ function downloadFile( url, path, force ) {
 		    if ( error ) {
 			console.error( 'Error (' + tryCount + ') in downloading file from url ' + url );
 			console.error( error )
-			if ( tryCount > 5 ) {
+			if ( tryCount++ > 5 ) {
 			    console.error( 'Unable to download file ' + url + ' at ' + path );
 			    process.exit( 1 );
 			}
@@ -796,7 +805,7 @@ function getArticleBase( articleId ) {
     var filename = articleId.replace( /\//g, '_' );
     var dirBase = filename.replace( /\./g, '_');
     return htmlDirectory + '/' + ( dirBase[0] || '_' ) + '/' + ( dirBase[1] || '_' ) + '/' + 
-	( dirBase[2] || '_' ) + '/' + ( dirBase[3] || '_' ) + '/' + filename + '.html';
+	( dirBase[2] || '_' ) + '/' + ( dirBase[3] || '_' ) + '/' + filename.substr( 0, 255 ) + '.html';
 }
 
 function getSubTitle() {
@@ -861,6 +870,15 @@ function ucFirst( str ) {
     str += '';
     var f = str.charAt( 0 ).toUpperCase();
     return f + str.substr( 1 );
+}
+
+function decodeURI( uri ) {
+    try {
+	return decodeURIComponent( uri );
+    } catch ( error ) {
+	console.error( error );
+	return uri;
+    }
 }
 
 /* Others */
