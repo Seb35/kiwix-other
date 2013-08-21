@@ -78,8 +78,8 @@ var redirectIds = {};
 var mediaIds = {};
 var namespaceIds = {};
 
-var parsoidUrl = 'http://parsoid.wmflabs.org/zh/';
-var hostUrl = 'http://zh.wikipedia.org/';
+var parsoidUrl = 'http://parsoid.wmflabs.org/sr/';
+var hostUrl = 'http://sr.wikipedia.org/';
 var webUrl = hostUrl + 'wiki/';
 var apiUrl = hostUrl + 'w/api.php?';
 
@@ -804,8 +804,14 @@ function getArticlePath( articleId ) {
 function getArticleBase( articleId ) {
     var filename = articleId.replace( /\//g, '_' );
     var dirBase = filename.replace( /\./g, '_');
+    
+    /* Filesystem is not able to handle with filename > 255 bytes */
+    while ( Buffer.byteLength( filename, 'utf8') > 250 ) {
+	filename = filename.substr( 0, filename.length - 1 );
+    }
+
     return htmlDirectory + '/' + ( dirBase[0] || '_' ) + '/' + ( dirBase[1] || '_' ) + '/' + 
-	( dirBase[2] || '_' ) + '/' + ( dirBase[3] || '_' ) + '/' + filename.substr( 0, 255 ) + '.html';
+	( dirBase[2] || '_' ) + '/' + ( dirBase[3] || '_' ) + '/' + filename + '.html';
 }
 
 function getSubTitle() {
