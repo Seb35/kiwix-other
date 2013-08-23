@@ -1,57 +1,52 @@
 #!/usr/bin/env node
 "use strict";
 
-/* Load required modules */
-var fs = require( 'fs' );
-var domino = require( 'domino' );
-var jsdom = require( 'jsdom' );
-var async = require( 'async' );
-var http = require( 'follow-redirects' ).http;
-var httpsync = require( 'httpsync' );
-var swig = require( 'swig' );
-var urlParser = require( 'url' );
-var pathParser = require( 'path' );
-var sleep = require( 'sleep' );
+/************************************/
+/* CUSTOM VARIABLE SECTION **********/
+/************************************/
 
-/* Set max parallel connection limit */
-var maxParallelRequests = 10
-http.globalAgent.maxSockets = maxParallelRequests;
+/* TODO: Create category pages */
+var withCategories = false;
 
-/* Error handling */
-var maxTryCount = 0;
-var tryCount = 0;
+/* Keep thumbnails in articles */
+var withMedias = true;
 
-/* Paths */
+/* Template code for any redirect to be written on the FS */
+var redirectTemplateCode = '<html><head><meta charset="UTF-8" /><title>{{ title }}</title><meta http-equiv="refresh" content="0; URL={{ target }}"></head><body></body></html>';
+
+/* All DOM nodes with on of these styles will be removed */
+var cssClassBlackList = [ 'noprint', 'ambox', 'stub', 'topicon', 'magnify' ]; 
+
+/* All DOM node with these styles will be deleted if no A node is included in the sub-tree */
+var cssClassBlackListIfNoLink = [ 'mainarticle', 'seealso', 'dablink', 'rellink' ];
+
+/* List of style to be removed */
+var cssClassCallsBlackList = [ 'plainlinks' ];
+
+/* All nodes with one of these ids will be remove */
+var idBlackList = [ 'purgelink' ];
+
+/* Directory wehre everything is saved */
 var rootPath = 'static/';
+
+/* Parsoid URL */
+var parsoidUrl = 'http://parsoid.wmflabs.org/bm/';
+
+/* Wikipedia/... URL */
+var hostUrl = 'http://bm.wikipedia.org/';
+
+/* License footer template code */
+var footerTemplateCode = '<div style="clear:both; background-image:linear-gradient(180deg, #E8E8E8, white); border-top: dashed 2px #AAAAAA; padding: 0.5em 0.5em 2em 0.5em; margin-top: 1em;">This article is issued from <a class="external text" href="{{ webUrl }}{{ articleId }}">Wikipedia</a>. The text is available under the <a class="external text" href="http://creativecommons.org/licenses/by-sa/3.0/">Creative Commons Attribution/Share Alike</a>; additional terms may apply for the media files.</div>';
+
+/************************************/
+/* CONSTANT VARIABLE SECTION ********/
+/************************************/
+
 var styleDirectory = 'style';
 var htmlDirectory = 'html';
 var mediaDirectory = 'media';
 var javascriptDirectory = 'js';
-
-/* Control */
-var getRedirectIdsCount = 0;
-var getRedirectIdsFinished;
-
-/* Redirects */
-var redirectTemplateCode = '<html><head><meta charset="UTF-8" /><title>{{ title }}</title><meta http-equiv="refresh" content="0; URL={{ target }}"></head><body></body></html>';
-var redirectTemplate = swig.compile( redirectTemplateCode );
-
-/* Global variables */
-var withCategories = false;
-var withMedias = true;
 var mediaRegex = /^(\d+px-|)(.+?)(\.[A-Za-z0-9]{2,6})(\.[A-Za-z0-9]{2,6}|)$/;
-
-/* Content specific */
-var cssClassBlackList = [ 'noprint', 'ambox', 'stub', 'topicon', 'magnify' ];
-var cssClassBlackListIfNoLink = [ 'mainarticle', 'seealso', 'dablink', 'rellink' ];
-var cssClassCallsBlackList = [ 'plainlinks' ];
-var idBlackList = [ 'purgelink' ];
-var ltr = true;
-var autoAlign = ltr ? 'left' : 'right';
-var revAutoAlign = ltr ? 'right' : 'left';
-var subTitle = "From Wikipedia, the free encyclopedia";
-
-/* Article template */
 var templateHtml = function(){/*
 <!DOCTYPE html>
 <html>
@@ -76,20 +71,47 @@ var templateHtml = function(){/*
 </html>
 */}.toString().slice(14,-3);
 
-/* Input variables */
-var namespaces = {};
+/************************************/
+/* SYSTEM VARIABLE SECTION **********/
+/************************************/
+
+var maxParallelRequests = 10;
+var maxTryCount = 0;
+var tryCount = 0;
+var ltr = true;
+var autoAlign = ltr ? 'left' : 'right';
+var revAutoAlign = ltr ? 'right' : 'left';
+var subTitle = "From Wikipedia, the free encyclopedia";
 var articleIds = {};
+var namespaceIds = {};
+var namespaces = {};
 var redirectIds = {};
 var mediaIds = {};
-var namespaceIds = {};
-
-var parsoidUrl = 'http://parsoid.wmflabs.org/bm/';
-var hostUrl = 'http://bm.wikipedia.org/';
 var webUrl = hostUrl + 'wiki/';
 var apiUrl = hostUrl + 'w/api.php?';
+var getRedirectIdsCount = 0;
+var getRedirectIdsFinished;
 
-/* Footer */
-var footerTemplateCode = '<div style="clear:both; background-image:linear-gradient(180deg, #E8E8E8, white); border-top: dashed 2px #AAAAAA; padding: 0.5em 0.5em 2em 0.5em; margin-top: 1em;">This article is issued from <a class="external text" href="{{ webUrl }}{{ articleId }}">Wikipedia</a>. The text is available under the <a class="external text" href="http://creativecommons.org/licenses/by-sa/3.0/">Creative Commons Attribution/Share Alike</a>; additional terms may apply for the media files.</div>';
+/************************************/
+/* MODULE VARIABLE SECTION **********/
+/************************************/
+
+var fs = require( 'fs' );
+var domino = require( 'domino' );
+var jsdom = require( 'jsdom' );
+var async = require( 'async' );
+var http = require( 'follow-redirects' ).http;
+var httpsync = require( 'httpsync' );
+var swig = require( 'swig' );
+var urlParser = require( 'url' );
+var pathParser = require( 'path' );
+var sleep = require( 'sleep' );
+
+/* Compile redirect template */
+var redirectTemplate = swig.compile( redirectTemplateCode );
+
+/* Increase the number of allowed parallel requests */
+http.globalAgent.maxSockets = maxParallelRequests;
 
 /* Initialization */
 getNamespaces();
