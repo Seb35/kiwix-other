@@ -106,6 +106,9 @@ var swig = require( 'swig' );
 var urlParser = require( 'url' );
 var pathParser = require( 'path' );
 var sleep = require( 'sleep' );
+var pngquant = require( 'pngquant' );
+var pngcrush = require( 'pngcrush' );
+var jpegtran = require( 'jpegtran' );
 
 /************************************/
 /* RUNNING CODE *********************/
@@ -797,7 +800,22 @@ function downloadFile( url, path, force ) {
 		},
 		function( finished ) {
 		    var request = http.get( url, function( response ) {
-			response.pipe( file );
+
+			switch( response.headers['content-type'] ) {
+			case 'image/png':
+			    response.pipe( new pngquant( [ 192, '--ordered' ] ) )
+				.pipe( new pngcrush( [ '-brute', '-rem', 'alla' ] ) )
+				.pipe( file );
+			    break;
+			case 'image/jpegd':
+			    response.pipe( new jpegtran( [ '-copy', 'none', '-progressive', '-optimize' ] ) )
+				.pipe( file );
+			    break;
+			default:
+			    response.pipe( file );
+			    break;
+			}
+
 			nok = false;
 			finished();
 		    });
