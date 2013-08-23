@@ -2,19 +2,24 @@
 "use strict";
 
 /* Load required modules */
-var fs = require('graceful-fs');
-var request = require('request');
-var domino = require('domino');
-var urlParser = require('url');
-var pathParser = require('path');
-var http = require('follow-redirects').http;
-var swig = require('swig');
-var httpsync = require('httpsync');
-var jsdom = require("jsdom");
-var async = require("async");
+var fs = require( 'fs' );
+var domino = require( 'domino' );
+var jsdom = require( 'jsdom' );
+var async = require( 'async' );
+var http = require( 'follow-redirects' ).http;
+var httpsync = require( 'httpsync' );
+var swig = require( 'swig' );
+var urlParser = require( 'url' );
+var pathParser = require( 'path' );
+var sleep = require( 'sleep' );
 
-/* Increase parallel connection limit */
-http.globalAgent.maxSockets = 10;
+/* Set max parallel connection limit */
+var maxParallelRequests = 10
+http.globalAgent.maxSockets = maxParallelRequests;
+
+/* Error handling */
+var maxTryCount = 0;
+var tryCount = 0;
 
 /* Paths */
 var rootPath = 'static/';
@@ -78,8 +83,8 @@ var redirectIds = {};
 var mediaIds = {};
 var namespaceIds = {};
 
-var parsoidUrl = 'http://parsoid.wmflabs.org/li/';
-var hostUrl = 'http://li.wikipedia.org/';
+var parsoidUrl = 'http://parsoid.wmflabs.org/bm/';
+var hostUrl = 'http://bm.wikipedia.org/';
 var webUrl = hostUrl + 'wiki/';
 var apiUrl = hostUrl + 'w/api.php?';
 
@@ -97,17 +102,17 @@ saveFavicon();
 
 /* Get content */
 async.series([
-	      /* Retrieve the article and redirect Ids */
-	      function( finished ) { getArticleIds( finished ) }, 
-	      function( finished ) { getRedirectIds( finished ) },
-
-	      /* Save to the disk */
-	      function( finished ) { saveArticles( finished ) },
-	      function( finished ) { saveRedirects( finished ) }
-	      ]);
+    /* Retrieve the article and redirect Ids */
+    function( finished ) { getArticleIds( finished ) }, 
+    function( finished ) { getRedirectIds( finished ) },
+    
+    /* Save to the disk */
+    function( finished ) { saveArticles( finished ) },
+    function( finished ) { saveRedirects( finished ) }
+]);
 
 function saveArticles( finished ) {
-    console.log("Saving articles...");
+    console.info("Saving articles...");
     async.eachLimit(Object.keys(articleIds), 10, saveArticlesCallback, function( err ) {
 	if (err) {
 	    console.error( 'Error in saveArticles callback: ' + err );
@@ -134,7 +139,7 @@ function saveArticlesCallback( articleId, finished ) {
 }
 
 function saveRedirects( finished ) {
-    console.log( 'Saving redirects...' );
+    console.info( 'Saving redirects...' );
     async.eachLimit( Object.keys( redirectIds ), 10, saveRedirectsCallback, function( err ) {
 	if (err) {
 	    console.error( 'Error in saveRedirects callback: ' + err );
@@ -191,9 +196,10 @@ function saveArticle( html, articleId ) {
 		a.setAttribute( 'class', concatenateToAttribute( a.getAttribute( 'class'), 'external' ) );
 	    }
 
+	    /* Check if the link is "valid" */
 	    if ( ! href ) {
-		console.log(a.outerHTML);
-		//		break;
+		console.error( 'No href attribute in the following code, in article ' + articleId );
+		console.error( a.outerHTML );
 		process.exit(1);
 	    }
 
@@ -206,7 +212,7 @@ function saveArticle( html, articleId ) {
 
 	    /* Remove internal links pointing to no mirrored articles */
 	    else if ( rel.substring( 0, 11 ) === 'mw:WikiLink' ) {
-		var targetId = decodeURI( href.replace(/^\.\//, '') );
+		var targetId = decodeURI( href.replace( /^\.\//, '' ) );
 		if ( isMirrored( targetId ) ) {
 		    a.setAttribute( 'href', getArticleUrl( targetId ) );
 		} else {
@@ -413,10 +419,6 @@ function saveArticle( html, articleId ) {
 
     /* Write the static html file */
     writeFile( doc.documentElement.outerHTML, getArticlePath( articleId ) );
-
-    /* Clean memory */
-    parsoidDoc = undefined;
-    doc = undefined;
 }
 
 function isMirrored( id ) {
@@ -479,7 +481,7 @@ function saveStylesheet() {
     console.info( 'Creating stylesheet...' );
     var stylePath = rootPath + styleDirectory + '/style.css';
     fs.unlink( stylePath, function() {} );
-    request( webUrl, function( error, response, html ) {
+    loadUrlSync( webUrl, function( html ) {
 	var doc = domino.createDocument( html );
 	var links = doc.getElementsByTagName( 'link' );
 	var cssUrlRegexp = new RegExp( 'url\\([\'"]{0,1}(.+?)[\'"]{0,1}\\)', 'gi' );
@@ -493,8 +495,8 @@ function saveStylesheet() {
 		/* Need a rewrite if url doesn't include protocol */
 		url = getFullUrl( url );
 		
-		console.info( 'Downloading CSS from ' + url );
-		request( url , function( error, response, body ) {
+		console.info( 'Downloading CSS from ' + decodeURI( url ) );
+		loadUrlSync( url , function( body ) {
 		    
 		    /* Downloading CSS dependencies */
 		    var match;
@@ -530,7 +532,7 @@ function getArticleIds( finished ) {
     var next = "";
     var url;
     do {
-	console.info( 'Getting article ids' + ( next ? ' (from ' + next + ')' : '' ) + '...' );
+	console.info( 'Getting article ids' + ( next ? ' (from ' + next  + ')' : '' ) + '...' );
 	url = apiUrl + 'action=query&generator=allpages&gapfilterredir=nonredirects&gaplimit=500&gapnamespace=0&format=json&gapcontinue=' + encodeURIComponent( next );
 	var body = loadUrlSync( url );
 	var entries = JSON.parse( body )['query']['pages'];
@@ -544,7 +546,7 @@ function getArticleIds( finished ) {
 }
 
 function getRedirectIds( finished ) {
-    console.log("Getting redirect ids...");
+    console.log( 'Getting redirect ids...' );
     getRedirectIdsCount = Object.keys(articleIds).length;
     getRedirectIdsFinished = finished;
     async.eachLimit( Object.keys(articleIds), 10, getRedirectIdsCallback, function( err ) {
@@ -659,13 +661,13 @@ function writeFile( data, path, callback ) {
 }
 
 function loadUrlSync( url, callback ) {
-    var tryCount = 0;
+    tryCount = 0;
     do {
 	try {
 	    var req = httpsync.get({ url : url });
 	    var res = req.end();
 	    if ( res.headers.location ) {
-		console.info( "Redirect detected, load " + res.headers.location );
+		console.info( "Redirect detected, load " + decodeURI( res.headers.location ) );
 		return loadUrlSync( res.headers.location, callback );
 	    } else {
 		if ( callback ) {
@@ -676,17 +678,18 @@ function loadUrlSync( url, callback ) {
 		}
 	    }
 	} catch ( error ) {
-	    if ( tryCount++ > 5 ) {
-		console.error( 'Unable to retrieve ' + url );
-		console.error( error );
+	    console.error( 'Unable to sync retrieve (try nb ' + tryCount++ + ') ' + decodeURI( url ) + '( ' + error + ' )');
+	    if ( maxTryCount && tryCount > maxTryCount ) {
 		process.exit( 1 );
+	    } else {
+		sleep.sleep( tryCount );
 	    }
 	}
     } while ( true );
 }
 
 function loadUrlAsync( url, callback, var1, var2, var3 ) {
-    var tryCount = 0;
+    tryCount = 0;
     var nok = true;
     var data;
 
@@ -713,11 +716,11 @@ function loadUrlAsync( url, callback, var1, var2, var3 ) {
 	},
 	function( error ) {
 	    if ( error ) {
-		console.error( 'Error (' + tryCount + ') by retrieving from url ' + url );
-		console.error( error )
-		if ( tryCount++ > 5 ) {
-		    console.error( 'Unable to retrieve ' + url + ' at ' + path );
+		console.error( 'Unable to async retrieve (try nb ' + tryCount++ + ') ' + decodeURI( url ) + '( ' + error + ' )');
+		if ( maxTryCount && tryCount > maxTryCount ) {
 		    process.exit( 1 );
+		} else {
+		    sleep.sleep( tryCount );
 		}
 	    } else {
 		callback( data, var1, var2, var3 );		
@@ -746,13 +749,13 @@ function downloadFile( url, path, force ) {
 	    console.info( path + ' already downloaded, download will be skipped.' );
 	} else {
 	    url = url.replace( /^https\:\/\//, 'http://' );
-	    console.info( 'Downloading ' + url + ' at ' + path + '...' );
+	    console.info( 'Downloading ' + decodeURI( url ) + ' at ' + path + '...' );
 
 	    createDirectoryRecursively( pathParser.dirname( path ) );
 
 	    var file = fs.createWriteStream( path );
 	    var nok = true;
-	    var tryCount = 0;
+	    tryCount = 0;
 
 	    async.whilst(
 		function() {
@@ -771,11 +774,11 @@ function downloadFile( url, path, force ) {
 		},
 		function( error ) {
 		    if ( error ) {
-			console.error( 'Error (' + tryCount + ') in downloading file from url ' + url );
-			console.error( error )
-			if ( tryCount++ > 5 ) {
-			    console.error( 'Unable to download file ' + url + ' at ' + path );
+			console.error( 'Unable to download (try nb ' + tryCount++ + ') from ' + decodeURI( url ) + '( ' + error + ' )');
+			if ( maxTryCount && tryCount > maxTryCount ) {
 			    process.exit( 1 );
+			} else {
+			    sleep.sleep( tryCount );
 			}
 		    }
 		}
@@ -848,7 +851,7 @@ function getMainPage() {
 	if ( parts[1] ) {
 	    var html = redirectTemplate( { title:  parts[1].replace( /_/g, ' ' ), target : '../' + getArticleBase( parts[1] ) } );
 	    writeFile( html, rootPath + htmlDirectory + '/index.html' );
-	    articleIds[ parts[1] ] = undefined;
+	    articleIds[ parts[ 1 ] ] = undefined;
 	} else {
 	    console.error( 'Unable to get the main page' );
 	    process.exit( 1 );
@@ -859,7 +862,7 @@ function getMainPage() {
 function getNamespaces() {
     var url = apiUrl + 'action=query&meta=siteinfo&siprop=namespaces|namespacealiases&format=json';
     var body = loadUrlSync( url );
-    var types = [ 'namespaces', 'namespacealiases'];
+    var types = [ 'namespaces', 'namespacealiases' ];
     types.map( function( type ) {
 	var entries = JSON.parse( body )['query'][type];
 	Object.keys(entries).map( function( key ) {
@@ -899,31 +902,4 @@ function decodeURI( uri ) {
 	console.error( error );
 	return uri;
     }
-}
-
-/* Others */
-function addFooter( finished ) {
-    console.log("Adding footers...");
-    async.eachLimit(Object.keys(articleIds), 10, addFooterCallback, function( err ) {
-	if (err) {
-	    console.error( 'Error in adding footer callback: ' + err );
-	}
-    });
-
-    finished();
-}
-
-function addFooterCallback( articleId, finished ) {
-   var articlePath = getArticlePath( articleId );
-    console.log( 'Adding footer to ' + articlePath );
-    fs.readFile(articlePath, 'utf8',  function (err,data) {
-	if ( err ) {
-	    console.log( err );
-	    return finished();
-	}
-	var doc = domino.createDocument( data );
-	doc.getElementById( 'mw-content-text' ).appendChild( getFooterNode( doc, articleId ) );
-        writeFile( doc.documentElement.outerHTML, articlePath );
-	finished();
-    });
 }
