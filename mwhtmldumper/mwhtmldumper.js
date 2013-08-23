@@ -109,6 +109,7 @@ var sleep = require( 'sleep' );
 var pngquant = require( 'pngquant' );
 var pngcrush = require( 'pngcrush' );
 var jpegtran = require( 'jpegtran' );
+var htmlminifier = require('html-minifier');
 
 /************************************/
 /* RUNNING CODE *********************/
@@ -453,8 +454,17 @@ function saveArticle( html, articleId ) {
     /* Append footer node */
     doc.getElementById( 'mw-content-text' ).appendChild( getFooterNode( doc, articleId ) );
 
+    /* Minify HTML code */
+    var html = htmlminifier.minify(doc.documentElement.outerHTML, {
+	removeComments: true,
+	removeCommentsFromCDATA: true,
+	collapseWhitespace: true,
+	collapseBooleanAttributes: true,
+	removeAttributeQuotes: true,
+	removeEmptyAttributes: true });
+
     /* Write the static html file */
-    writeFile( doc.documentElement.outerHTML, getArticlePath( articleId ) );
+    writeFile( html, getArticlePath( articleId ) );
 }
 
 function isMirrored( id ) {
