@@ -107,6 +107,10 @@ var urlParser = require( 'url' );
 var pathParser = require( 'path' );
 var sleep = require( 'sleep' );
 
+/************************************/
+/* RUNNING CODE *********************/
+/************************************/
+
 /* Compile redirect template */
 var redirectTemplate = swig.compile( redirectTemplateCode );
 
@@ -133,36 +137,20 @@ async.series([
     function( finished ) { saveRedirects( finished ) }
 ]);
 
-function saveArticles( finished ) {
-    console.info("Saving articles...");
-    async.eachLimit(Object.keys(articleIds), 10, saveArticlesCallback, function( err ) {
-	if (err) {
-	    console.error( 'Error in saveArticles callback: ' + err );
-	}
-    });
-    finished();
-}
-
-function saveArticlesCallback( articleId, finished ) {
-   var articlePath = getArticlePath( articleId );
-   fs.exists( articlePath, function (exists) {
-       if ( exists ) {
-           console.info( articleId + ' already downloaded at ' + articlePath );
-	   finished();
-       } else {
-           var articleUrl = parsoidUrl + articleId;
-           console.info( 'Downloading article from ' + articleUrl + ' at ' + articlePath + '...' );
-           loadUrlAsync( articleUrl, function( html, articleId ) {
-	       saveArticle( html, articleId );
-	       finished();
-           }, articleId);
-       }
-   });
-}
+/************************************/
+/* FUNCTIONS ************************/
+/************************************/
 
 function saveRedirects( finished ) {
     console.info( 'Saving redirects...' );
-    async.eachLimit( Object.keys( redirectIds ), 10, saveRedirectsCallback, function( err ) {
+
+    function callback( redirectId, finished ) {
+	var html = redirectTemplate( { title: redirectId.replace( /_/g, ' ' ), 
+				       target : getArticleUrl( redirectIds[ redirectId ] ) } );
+	writeFile( html, getArticlePath( redirectId ), finished );
+    }
+
+    async.eachLimit( Object.keys( redirectIds ), 10, callback, function( err ) {
 	if (err) {
 	    console.error( 'Error in saveRedirects callback: ' + err );
 	}
@@ -170,10 +158,33 @@ function saveRedirects( finished ) {
     finished();
 }
 
-function saveRedirectsCallback( redirectId, finished ) {
-    var html = redirectTemplate( { title: redirectId.replace( /_/g, ' ' ), 
-				   target : getArticleUrl( redirectIds[ redirectId ] ) } );
-    writeFile( html, getArticlePath( redirectId ), finished );
+function saveArticles( finished ) {
+    console.info( 'Saving articles...' );
+
+    function callback( articleId, finished ) {
+	var articlePath = getArticlePath( articleId );
+	fs.exists( articlePath, function (exists) {
+	    if ( exists ) {
+		console.info( articleId + ' already downloaded at ' + articlePath );
+		finished();
+	    } else {
+		var articleUrl = parsoidUrl + articleId;
+		console.info( 'Downloading article from ' + articleUrl + ' at ' + articlePath + '...' );
+		loadUrlAsync( articleUrl, function( html, articleId ) {
+		    saveArticle( html, articleId );
+		    finished();
+		}, articleId);
+	    }
+	});
+    }
+
+    async.eachLimit(Object.keys(articleIds), 10, callback, function( err ) {
+	if (err) {
+	    console.error( 'Error in saveArticles callback: ' + err );
+	}
+    });
+
+    finished();
 }
 
 function saveArticle( html, articleId ) {
@@ -571,27 +582,28 @@ function getRedirectIds( finished ) {
     console.log( 'Getting redirect ids...' );
     getRedirectIdsCount = Object.keys(articleIds).length;
     getRedirectIdsFinished = finished;
-    async.eachLimit( Object.keys(articleIds), 10, getRedirectIdsCallback, function( err ) {
+
+    function callback( articleId, finished ) { 
+	var url = apiUrl + 'action=query&list=backlinks&blfilterredir=redirects&bllimit=500&format=json&bltitle=' + encodeURIComponent( articleId );
+	getRedirectIdsCount -= 1;
+	loadUrlAsync( url, function( body, articleId ) {
+            console.info( 'Getting redirects for article ' + articleId + '...' );
+	    var entries = JSON.parse( body )['query']['backlinks'];
+	    entries.map( function( entry ) {
+		redirectIds[entry['title'].replace( / /g, '_' )] = articleId;
+	    });
+	    finished();
+	    if (!getRedirectIdsCount) {
+		getRedirectIdsFinished();
+	    }
+	}, articleId);
+    }
+
+    async.eachLimit( Object.keys(articleIds), 10, callback, function( err ) {
 	if (err) {
             console.error( 'Error in getRedirectIds callback: ' + err );
 	}
     });
-}
-
-function getRedirectIdsCallback( articleId, finished ) { 
-    var url = apiUrl + 'action=query&list=backlinks&blfilterredir=redirects&bllimit=500&format=json&bltitle=' + encodeURIComponent( articleId );
-    getRedirectIdsCount -= 1;
-    loadUrlAsync( url, function( body, articleId ) {
-        console.info( 'Getting redirects for article ' + articleId + '...' );
-	var entries = JSON.parse( body )['query']['backlinks'];
-	entries.map( function( entry ) {
-	    redirectIds[entry['title'].replace( / /g, '_' )] = articleId;
-	});
-	finished();
-	if (!getRedirectIdsCount) {
-	    getRedirectIdsFinished();
-	}
-    }, articleId);
 }
 
 /* Create directories for static files */
