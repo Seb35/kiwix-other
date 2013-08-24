@@ -30,10 +30,10 @@ var idBlackList = [ 'purgelink' ];
 var rootPath = 'static/';
 
 /* Parsoid URL */
-var parsoidUrl = 'http://parsoid.wmflabs.org/bm/';
+var parsoidUrl = 'http://parsoid.wmflabs.org/cs/';
 
 /* Wikipedia/... URL */
-var hostUrl = 'http://bm.wikipedia.org/';
+var hostUrl = 'http://cs.wikipedia.org/';
 
 /* License footer template code */
 var footerTemplateCode = '<div style="clear:both; background-image:linear-gradient(180deg, #E8E8E8, white); border-top: dashed 2px #AAAAAA; padding: 0.5em 0.5em 2em 0.5em; margin-top: 1em;">This article is issued from <a class="external text" href="{{ webUrl }}{{ articleId }}">Wikipedia</a>. The text is available under the <a class="external text" href="http://creativecommons.org/licenses/by-sa/3.0/">Creative Commons Attribution/Share Alike</a>; additional terms may apply for the media files.</div>';
@@ -817,7 +817,7 @@ function downloadFile( url, path, force ) {
 				.pipe( new pngcrush( [ '-brute', '-rem', 'alla' ] ) )
 				.pipe( file );
 			    break;
-			case 'image/jpegd':
+			case 'image/jpeg':
 			    response.pipe( new jpegtran( [ '-copy', 'none', '-progressive', '-optimize' ] ) )
 				.pipe( file );
 			    break;
