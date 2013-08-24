@@ -821,7 +821,7 @@ function downloadFile( url, path, force ) {
 			    response
 				.pipe( new pngquant( [ 192, '--ordered' ] ) )
 				.on('error', function() { response.pipe( file ); } )
-				.pipe( new pngcrush( [ '-brute', '-rem', 'alla' ] ) )
+				.pipe( new pngcrush( [ '-brute', '-l', '9', '-rem', 'alla' ] ) )
 				.on('error', function() { response.pipe( file ); } )
 				.pipe( file );
 			    break;
