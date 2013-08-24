@@ -730,7 +730,7 @@ function loadUrlSync( url, callback ) {
 		}
 	    }
 	} catch ( error ) {
-	    console.error( 'Unable to sync retrieve (try nb ' + tryCount++ + ') ' + decodeURI( url ) + '( ' + error + ' )');
+	    console.error( 'Unable to sync retrieve (try nb ' + tryCount++ + ') ' + decodeURI( url ) + ' ( ' + error + ' )');
 	    if ( maxTryCount && tryCount > maxTryCount ) {
 		process.exit( 1 );
 	    } else {
@@ -761,6 +761,9 @@ function loadUrlAsync( url, callback, var1, var2, var3 ) {
 		    nok = false;
 		    finished();
 		});
+		response.on( 'error', function() { 
+		    finished( error );
+		})
 	    }).on( 'error', function( error ) {
 		finished( error );
 	    });
@@ -920,7 +923,7 @@ function getMainPage() {
     loadUrlSync( webUrl, function( body ) {
 	var mainPageRegex = /\"wgPageName\"\:\"(.*?)\"/;
 	var parts = mainPageRegex.exec( body );
-	if ( parts[1] ) {
+	if ( parts[ 1 ] ) {
 	    var html = redirectTemplate( { title:  parts[1].replace( /_/g, ' ' ), target : '../' + getArticleBase( parts[1] ) } );
 	    writeFile( html, rootPath + htmlDirectory + '/index.html' );
 	    articleIds[ parts[ 1 ] ] = undefined;
