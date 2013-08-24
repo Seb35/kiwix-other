@@ -455,13 +455,18 @@ function saveArticle( html, articleId ) {
     doc.getElementById( 'mw-content-text' ).appendChild( getFooterNode( doc, articleId ) );
 
     /* Minify HTML code */
-    var html = htmlminifier.minify(doc.documentElement.outerHTML, {
-	removeComments: true,
-	removeCommentsFromCDATA: true,
-	collapseWhitespace: true,
-	collapseBooleanAttributes: true,
-	removeAttributeQuotes: true,
-	removeEmptyAttributes: true });
+    var html;
+    try {
+	html = htmlminifier.minify( doc.documentElement.outerHTML, {
+	    removeComments: true,
+	    removeCommentsFromCDATA: true,
+	    collapseWhitespace: true,
+	    collapseBooleanAttributes: true,
+	    removeAttributeQuotes: true,
+	    removeEmptyAttributes: true });
+    } catch ( error ) {
+	html = doc.documentElement.outerHTML;
+    }
 
     /* Write the static html file */
     writeFile( html, getArticlePath( articleId ) );
@@ -813,12 +818,17 @@ function downloadFile( url, path, force ) {
 
 			switch( response.headers['content-type'] ) {
 			case 'image/png':
-			    response.pipe( new pngquant( [ 192, '--ordered' ] ) )
+			    response
+				.pipe( new pngquant( [ 192, '--ordered' ] ) )
+				.on('error', function() { response.pipe( file ); } )
 				.pipe( new pngcrush( [ '-brute', '-rem', 'alla' ] ) )
+				.on('error', function() { response.pipe( file ); } )
 				.pipe( file );
 			    break;
 			case 'image/jpeg':
-			    response.pipe( new jpegtran( [ '-copy', 'none', '-progressive', '-optimize' ] ) )
+			    response
+				.pipe( new jpegtran( [ '-copy', 'none', '-progressive', '-optimize' ] ) )
+				.on('error', function() { response.pipe( file ); } )
 				.pipe( file );
 			    break;
 			default:
