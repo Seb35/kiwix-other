@@ -134,7 +134,7 @@ saveFavicon();
 async.series([
     /* Retrieve the article and redirect Ids */
     function( finished ) { getArticleIds( finished ) }, 
-//    function( finished ) { getRedirectIds( finished ) },
+    function( finished ) { getRedirectIds( finished ) },
     
     /* Save to the disk */
     function( finished ) { saveArticles( finished ) },
@@ -919,7 +919,7 @@ function saveFavicon() {
     downloadFile( 'http://sourceforge.net/p/kiwix/tools/ci/master/tree/dumping_tools/data/wikipedia-icon-48x48.png?format=raw', rootPath + mediaDirectory + '/favicon.png' );
 }
 
-function getMainPage5B() {
+function getMainPage() {
     loadUrlSync( webUrl, function( body ) {
 	var mainPageRegex = /\"wgPageName\"\:\"(.*?)\"/;
 	var parts = mainPageRegex.exec( body );
