@@ -455,13 +455,18 @@ function saveArticle( html, articleId ) {
     doc.getElementById( 'mw-content-text' ).appendChild( getFooterNode( doc, articleId ) );
 
     /* Minify HTML code */
-    var html = htmlminifier.minify(doc.documentElement.outerHTML, {
-	removeComments: true,
-	removeCommentsFromCDATA: true,
-	collapseWhitespace: true,
-	collapseBooleanAttributes: true,
-	removeAttributeQuotes: true,
-	removeEmptyAttributes: true });
+    var html;
+    try {
+	html = htmlminifier.minify( doc.documentElement.outerHTML, {
+	    removeComments: true,
+	    removeCommentsFromCDATA: true,
+	    collapseWhitespace: true,
+	    collapseBooleanAttributes: true,
+	    removeAttributeQuotes: true,
+	    removeEmptyAttributes: true });
+    } catch ( error ) {
+	html = doc.documentElement.outerHTML;
+    }
 
     /* Write the static html file */
     writeFile( html, getArticlePath( articleId ) );
