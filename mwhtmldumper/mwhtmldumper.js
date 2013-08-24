@@ -818,12 +818,17 @@ function downloadFile( url, path, force ) {
 
 			switch( response.headers['content-type'] ) {
 			case 'image/png':
-			    response.pipe( new pngquant( [ 192, '--ordered' ] ) )
+			    response
+				.pipe( new pngquant( [ 192, '--ordered' ] ) )
+				.on('error', function() { response.pipe( file ); } )
 				.pipe( new pngcrush( [ '-brute', '-rem', 'alla' ] ) )
+				.on('error', function() { response.pipe( file ); } )
 				.pipe( file );
 			    break;
 			case 'image/jpeg':
-			    response.pipe( new jpegtran( [ '-copy', 'none', '-progressive', '-optimize' ] ) )
+			    response
+				.pipe( new jpegtran( [ '-copy', 'none', '-progressive', '-optimize' ] ) )
+				.on('error', function() { response.pipe( file ); } )
 				.pipe( file );
 			    break;
 			default:
