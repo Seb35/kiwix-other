@@ -33,7 +33,14 @@ AC_LANG(C++)
 # Check the existence of stat64 (to handle file >2GB) in the libc
 AC_CHECK_FUNCS([stat64])
 
-# defines for compilation of zimlib
+# liblzma
+LIBLZMA_CFLAGS=""
+LIBLZMA_LDFLAGS=" -llzma"
+
+# libzim
+LIBZIM_CFLAGS=""
+LIBZIM_LDFLAGS=" -lzim"
+
 AC_DEFINE_UNQUOTED(CLUSTER_CACHE_SIZE, 16, [set zim cluster cache size to number of cached chunks])
 AC_DEFINE_UNQUOTED(DIRENT_CACHE_SIZE, 512, [set zim dirent cache size to number of cached chunks])
 AC_DEFINE_UNQUOTED(LZMA_MEMORY_SIZE, 128, [set lzma uncompress memory size to number of MB])
@@ -41,9 +48,10 @@ AC_DEFINE(ENABLE_LZMA, [1], [defined if lzma compression is enabled])
 
 # export variables
 AC_SUBST(CXXFLAGS)
-
-AC_SUBST(ZIMLIB_CFLAGS)
-AC_SUBST(ZIMLIB_LDFLAGS)
+AC_SUBST(LIBLZMA_CFLAGS)
+AC_SUBST(LIBLZMA_LDFLAGS)
+AC_SUBST(LIBZIM_CFLAGS)
+AC_SUBST(LIBZIM_LDFLAGS)
 
 # Configure the output files
 AC_CONFIG_FILES([
