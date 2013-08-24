@@ -1,128 +1,131 @@
+#include <getopt.h>
+#include <stdio.h>
+#include <dirent.h>
+#include <unistd.h>
+#include <pthread.h>
+
 #include <iostream>
 #include <sstream>
 #include <vector>
+#include <queue>
+
 #include <zim/writer/zimcreator.h>
 #include <zim/blob.h>
 
-#include <getopt.h>
+#define MAX_QUEUE_SIZE 100
 
-class TestArticle : public zim::writer::Article
-{
-    std::string _id;
-    std::string _data;
+bool verboseFlag = false;
+std::string directoryPath;
+std::string zimPath;
+zim::writer::ZimCreator zimCreator;
+pthread_t directoryVisitor;
+pthread_mutex_t filenameQueueMutex;
+std::queue<std::string> filenameQueue;
+pthread_mutex_t directoryVisitorRunningMutex;
+bool isDirectoryVisitorRunningFlag = false;
 
+void directoryVisitorRunning(bool value) {
+  pthread_mutex_lock(&directoryVisitorRunningMutex);
+  isDirectoryVisitorRunningFlag = value;
+  pthread_mutex_unlock(&directoryVisitorRunningMutex); 
+}
+
+bool isDirectoryVisitorRunning() {
+  pthread_mutex_lock(&directoryVisitorRunningMutex);
+  bool retVal = isDirectoryVisitorRunningFlag;
+  pthread_mutex_unlock(&directoryVisitorRunningMutex); 
+  return retVal;
+}
+
+bool isFilenameQueueEmpty() {
+  pthread_mutex_lock(&filenameQueueMutex);
+  bool retVal = filenameQueue.empty();
+  pthread_mutex_unlock(&filenameQueueMutex);
+  return retVal;
+}
+
+/* ArticleSource class */
+class ArticleSource : public zim::writer::ArticleSource {
   public:
-    TestArticle()  { }
-    explicit TestArticle(const std::string& id);
-
-    virtual std::string getAid() const;
-    virtual char getNamespace() const;
-    virtual std::string getUrl() const;
-    virtual std::string getTitle() const;
-    virtual bool isRedirect() const;
-    virtual std::string getMimeType() const;
-    virtual std::string getRedirectAid() const;
-
-    zim::Blob data()
-    { return zim::Blob(&_data[0], _data.size()); }
-};
-
-TestArticle::TestArticle(const std::string& id)
-  : _id(id)
-{
-  std::ostringstream data;
-  data << "this is article " << id << std::endl;
-  _data = data.str();
-}
-
-std::string TestArticle::getAid() const
-{
-  return _id;
-}
-
-char TestArticle::getNamespace() const
-{
-  return 'A';
-}
-
-std::string TestArticle::getUrl() const
-{
-  return _id;
-}
-
-std::string TestArticle::getTitle() const
-{
-  return _id;
-}
-
-bool TestArticle::isRedirect() const
-{
-  return false;
-}
-
-std::string TestArticle::getMimeType() const
-{
-  return "text/plain";
-}
-
-std::string TestArticle::getRedirectAid() const
-{
-  return "";
-}
-
-class TestArticleSource : public zim::writer::ArticleSource
-{
-    std::vector<TestArticle> _articles;
-    unsigned _next;
-
-  public:
-    explicit TestArticleSource(unsigned max = 16);
-
+    explicit ArticleSource();
     virtual const zim::writer::Article* getNextArticle();
     virtual zim::Blob getData(const std::string& aid);
 };
 
-TestArticleSource::TestArticleSource(unsigned max)
-  : _next(0)
-{
-  _articles.resize(max);
-  for (unsigned n = 0; n < max; ++n)
-  {
-    std::ostringstream id;
-    id << (n + 1);
-    _articles[n] = TestArticle(id.str());
+ArticleSource::ArticleSource() {
+}
+
+const zim::writer::Article* ArticleSource::getNextArticle() {
+  zim::writer::Article *article = NULL;
+
+  if (isDirectoryVisitorRunning() || !isFilenameQueueEmpty()) {
+    std::cout << "getNexArticle..." << std::endl;
   }
+
+  return article;
 }
 
-const zim::writer::Article* TestArticleSource::getNextArticle()
-{
-  if (_next >= _articles.size())
-    return 0;
-
-  unsigned n = _next++;
-
-  return &_articles[n];
+zim::Blob ArticleSource::getData(const std::string& aid) {
+  zim::Blob blob;
+  return blob;
 }
 
-zim::Blob TestArticleSource::getData(const std::string& aid)
-{
-  unsigned n;
-  std::istringstream s(aid);
-  s >> n;
-  return _articles[n-1].data();
-}
-
+/* Non ZIM related code */
 void usage() {
   std::cout << "zimwriterfs DIRECTORY ZIM" << std::endl;
   std::cout << "\tDIRECTORY is the path of the directory containing the HTML pages you want to put in the ZIM file," << std::endl;
   std::cout << "\tZIM       is the path of the ZIM file you want to obtain." << std::endl;
 }
 
+void *visitDirectory(const std::string &path) {
+  pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
+  DIR *directory;
+
+  /* Open directory */
+  directory = opendir(path.c_str());
+  if (directory == NULL) {
+    std::cerr << "Unable to open directory " << path << std::endl;
+    exit(1);
+  }
+
+  /* Read directory content */
+  struct dirent *entry;
+  while (entry = readdir(directory)) {
+    std::string entryName = entry->d_name;
+    std::string fullEntryName = path + "/" + entryName;
+
+    std::cout << fullEntryName << std::endl;
+
+    switch (entry->d_type) {
+    case DT_REG:
+      pthread_mutex_lock(&filenameQueueMutex);
+      filenameQueue.push(entryName);
+      pthread_mutex_unlock(&filenameQueueMutex); 
+      break;
+    case DT_DIR:
+      if (entryName != "." && entryName != "..") {
+	std::cout << "visiting '" << fullEntryName << "'" <<std::endl;
+	visitDirectory(fullEntryName);
+      }
+      break;
+    }
+  }
+
+  closedir(directory);
+  pthread_exit(NULL);
+  directoryVisitorRunning(true);
+}
+
+void *visitDirectoryPath(void *path) {
+  visitDirectory(directoryPath);
+}
 
 int main(int argc, char** argv) {
-  bool verboseFlag = false;
-  std::string directoryPath;
-  std::string zimPath;
+  ArticleSource source;
+
+  /* Init */
+  pthread_mutex_init(&filenameQueueMutex, NULL);
+  pthread_mutex_init(&directoryVisitorRunningMutex, NULL);
 
   /* Argument parsing */
   static struct option long_options[] = {
@@ -162,17 +165,16 @@ int main(int argc, char** argv) {
     exit(1);
   }
 
-  /*
-  try
-  {
-    zim::writer::ZimCreator c(argc, argv);
-    TestArticleSource src;
-    c.create("foo.zim", src);
-  }
-  catch (const std::exception& e)
-  {
+  /* Directory visitor */
+  directoryVisitorRunning(true);
+  pthread_create(&(directoryVisitor), NULL, visitDirectoryPath, (void*)NULL);
+  pthread_detach(directoryVisitor);
+
+  /* ZIM creation */
+  try {
+    zimCreator.create(zimPath, source);
+  } catch (const std::exception& e)
+    {
     std::cerr << e.what() << std::endl;
   }
-  */
 }
-
