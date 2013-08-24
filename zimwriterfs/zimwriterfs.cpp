@@ -44,6 +44,105 @@ bool isFilenameQueueEmpty() {
   return retVal;
 }
 
+void pushToFilenameQueue(const std::string &filename) {
+  unsigned int wait = 0;
+  unsigned int queueSize = 0;
+
+  do {
+    usleep(wait);
+    pthread_mutex_lock(&filenameQueueMutex);
+    unsigned queueSize = filenameQueue.size();
+    pthread_mutex_unlock(&filenameQueueMutex);
+    wait += 10;
+  } while (queueSize > MAX_QUEUE_SIZE);
+
+  pthread_mutex_lock(&filenameQueueMutex);
+  filenameQueue.push(filename);
+  pthread_mutex_unlock(&filenameQueueMutex); 
+}
+
+bool popFromFilenameQueue(std::string &filename) {
+  bool retVal = false;
+  unsigned int wait = 0;
+
+  do {
+    usleep(wait);
+    if (!isFilenameQueueEmpty()) {
+      pthread_mutex_lock(&filenameQueueMutex);
+      filename = filenameQueue.front();
+      filenameQueue.pop();
+      pthread_mutex_unlock(&filenameQueueMutex);
+      retVal = true;
+      break;
+    } else {
+      wait += 10;
+    }
+  } while (isDirectoryVisitorRunning() || !isFilenameQueueEmpty());
+
+  return retVal;
+}
+
+/* Article class */
+class Article : public zim::writer::Article
+{
+    friend class WikiSource;
+
+    char ns;
+    std::string aid;
+    std::string title;
+    std::string redirectAid;
+
+  public:
+    virtual std::string getAid() const;
+    virtual char getNamespace() const;
+    virtual std::string getUrl() const;
+    virtual std::string getTitle() const;
+    virtual zim::size_type getVersion() const;
+    virtual bool isRedirect() const;
+    virtual std::string getMimeType() const;
+    virtual std::string getRedirectAid() const;
+};
+
+std::string Article::getAid() const
+{
+  return title;
+}
+
+char Article::getNamespace() const
+{
+  return 'A';
+}
+
+std::string Article::getUrl() const
+{
+  return title;
+}
+
+std::string Article::getTitle() const
+{
+  return title;
+}
+
+zim::size_type Article::getVersion() const
+{
+  return 0;
+}
+
+bool Article::isRedirect() const
+{
+  return !redirectAid.empty();
+}
+
+std::string Article::getMimeType() const
+{
+  return "text/html";
+}
+
+std::string Article::getRedirectAid() const
+{
+  return redirectAid;
+}
+
 /* ArticleSource class */
 class ArticleSource : public zim::writer::ArticleSource {
   public:
@@ -56,10 +155,14 @@ ArticleSource::ArticleSource() {
 }
 
 const zim::writer::Article* ArticleSource::getNextArticle() {
-  zim::writer::Article *article = NULL;
-
-  if (isDirectoryVisitorRunning() || !isFilenameQueueEmpty()) {
-    std::cout << "getNexArticle..." << std::endl;
+  std::cout << "getNexArticle..." << std::endl;
+  std::string filename;
+  Article *article = NULL;
+  
+  if (popFromFilenameQueue(filename)) {
+    std::cout << "Packing " << filename << "..." << std::endl;
+    article = new Article();
+    usleep(1000000);
   }
 
   return article;
@@ -94,17 +197,14 @@ void *visitDirectory(const std::string &path) {
     std::string entryName = entry->d_name;
     std::string fullEntryName = path + "/" + entryName;
 
-    std::cout << fullEntryName << std::endl;
-
     switch (entry->d_type) {
     case DT_REG:
-      pthread_mutex_lock(&filenameQueueMutex);
-      filenameQueue.push(entryName);
-      pthread_mutex_unlock(&filenameQueueMutex); 
+      std::cout << "Pushing '" << fullEntryName << "'" <<std::endl;
+      pushToFilenameQueue(fullEntryName);
       break;
     case DT_DIR:
       if (entryName != "." && entryName != "..") {
-	std::cout << "visiting '" << fullEntryName << "'" <<std::endl;
+	std::cout << "Visiting '" << fullEntryName << "'" <<std::endl;
 	visitDirectory(fullEntryName);
       }
       break;
@@ -112,12 +212,13 @@ void *visitDirectory(const std::string &path) {
   }
 
   closedir(directory);
-  pthread_exit(NULL);
-  directoryVisitorRunning(true);
 }
 
 void *visitDirectoryPath(void *path) {
   visitDirectory(directoryPath);
+  std::cout << "Quitting visitor" << std::endl;
+  directoryVisitorRunning(false); 
+  pthread_exit(NULL);
 }
 
 int main(int argc, char** argv) {
