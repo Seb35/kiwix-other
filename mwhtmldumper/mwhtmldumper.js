@@ -30,10 +30,10 @@ var idBlackList = [ 'purgelink' ];
 var rootPath = 'static/';
 
 /* Parsoid URL */
-var parsoidUrl = 'http://parsoid.wmflabs.org/cs/';
+var parsoidUrl = 'http://parsoid.wmflabs.org/el/';
 
 /* Wikipedia/... URL */
-var hostUrl = 'http://cs.wikipedia.org/';
+var hostUrl = 'http://el.wikipedia.org/';
 
 /* License footer template code */
 var footerTemplateCode = '<div style="clear:both; background-image:linear-gradient(180deg, #E8E8E8, white); border-top: dashed 2px #AAAAAA; padding: 0.5em 0.5em 2em 0.5em; margin-top: 1em;">This article is issued from <a class="external text" href="{{ webUrl }}{{ articleId }}">Wikipedia</a>. The text is available under the <a class="external text" href="http://creativecommons.org/licenses/by-sa/3.0/">Creative Commons Attribution/Share Alike</a>; additional terms may apply for the media files.</div>';
@@ -135,7 +135,7 @@ saveFavicon();
 async.series([
     /* Retrieve the article and redirect Ids */
     function( finished ) { getArticleIds( finished ) }, 
-    function( finished ) { getRedirectIds( finished ) },
+//    function( finished ) { getRedirectIds( finished ) },
     
     /* Save to the disk */
     function( finished ) { saveArticles( finished ) },
@@ -752,6 +752,11 @@ function loadUrlAsync( url, callback, var1, var2, var3 ) {
 	    return nok;
 	},
 	function( finished ) {
+
+	    process.on('uncaughtException', function( errror ) {
+		finished( typeof error !== 'undefined' ? error : 'Uncaught exception' );
+            });
+
 	    var request = http.get( url, function( response ) {
 		data = '';
 		response.setEncoding( 'utf8' );
@@ -824,6 +829,11 @@ function downloadFile( url, path, force ) {
 		function( finished ) {
 		    var request = http.get( url, function( response ) {
 			var writeFile = function( response, finished ) {
+
+			    process.on('Uncaught exception', function( errror ) {
+				finished( typeof error !== 'undefined' ? error : 'Uncaught exception' );
+			    });
+
 			    var mimeType = optimize ? response.headers['content-type'] : '';
 			    var file = fs.createWriteStream( path );
 			    file.on( 'error', function() { optimize = false; finished( typeof error !== 'undefined' ? error : 'Error in pngquant' ); } )
