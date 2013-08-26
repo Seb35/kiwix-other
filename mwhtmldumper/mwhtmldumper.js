@@ -75,7 +75,7 @@ var templateHtml = function(){/*
 /* SYSTEM VARIABLE SECTION **********/
 /************************************/
 
-var maxParallelRequests = 10;
+var maxParallelRequests = 6;
 var maxTryCount = 0;
 var tryCount = 0;
 var ltr = true;
@@ -110,6 +110,7 @@ var pngquant = require( 'pngquant' );
 var pngcrush = require( 'pngcrush' );
 var jpegtran = require( 'jpegtran' );
 var htmlminifier = require('html-minifier');
+var smooth = require('smooth')(maxParallelRequests);
 
 /************************************/
 /* RUNNING CODE *********************/
@@ -154,7 +155,7 @@ function saveRedirects( finished ) {
 	writeFile( html, getArticlePath( redirectId ), finished );
     }
 
-    async.eachLimit( Object.keys( redirectIds ), 10, callback, function( err ) {
+    async.eachLimit( Object.keys( redirectIds ), maxParallelRequests, callback, function( err ) {
 	if (err) {
 	    console.error( 'Error in saveRedirects callback: ' + err );
 	}
@@ -182,7 +183,7 @@ function saveArticles( finished ) {
 	});
     }
 
-    async.eachLimit(Object.keys(articleIds), 10, callback, function( err ) {
+    async.eachLimit(Object.keys(articleIds), maxParallelRequests, callback, function( err ) {
 	if (err) {
 	    console.error( 'Error in saveArticles callback: ' + err );
 	}
@@ -617,7 +618,7 @@ function getRedirectIds( finished ) {
 	}, articleId);
     }
 
-    async.eachLimit( Object.keys(articleIds), 10, callback, function( err ) {
+    async.eachLimit( Object.keys(articleIds), maxParallelRequests, callback, function( err ) {
 	if (err) {
             console.error( 'Error in getRedirectIds callback: ' + err );
 	}
@@ -732,6 +733,7 @@ function loadUrlSync( url, callback ) {
 	} catch ( error ) {
 	    console.error( 'Unable to sync retrieve (try nb ' + tryCount++ + ') ' + decodeURI( url ) + ' ( ' + error + ' )');
 	    if ( maxTryCount && tryCount > maxTryCount ) {
+		console.error( 'Exit on purpose' );
 		process.exit( 1 );
 	    } else {
 		sleep.sleep( tryCount );
@@ -753,26 +755,29 @@ function loadUrlAsync( url, callback, var1, var2, var3 ) {
 	    var request = http.get( url, function( response ) {
 		data = '';
 		response.setEncoding( 'utf8' );
-		
-		response.on( 'data', function ( chunk ) {
-		    data += chunk;
-		});
-		response.on( 'end', function () {
-		    nok = false;
-		    finished();
-		});
-		response.on( 'error', function() { 
+		response
+		    .on( 'data', function ( chunk ) {
+			data += chunk;
+		    })
+		    .on( 'end', function () {
+			nok = false;
+			finished();
+		    })
+		    .on( 'error', function() { 
+			finished( error );
+		    });
+	    })
+	    request
+		.on( 'error', function( error ) {
 		    finished( error );
-		})
-	    }).on( 'error', function( error ) {
-		finished( error );
-	    });
+		});
 	    request.end();
 	},
 	function( error ) {
 	    if ( error ) {
-		console.error( 'Unable to async retrieve (try nb ' + tryCount++ + ') ' + decodeURI( url ) + '( ' + error + ' )');
+		console.error( 'Unable to async retrieve (try nb ' + tryCount++ + ') ' + decodeURI( url ) + ' ( ' + error + ' )');
 		if ( maxTryCount && tryCount > maxTryCount ) {
+		    console.error( 'Exit on purpose' );
 		    process.exit( 1 );
 		} else {
 		    sleep.sleep( tryCount );
@@ -805,11 +810,11 @@ function downloadFile( url, path, force ) {
 	} else {
 	    url = url.replace( /^https\:\/\//, 'http://' );
 	    console.info( 'Downloading ' + decodeURI( url ) + ' at ' + path + '...' );
-
+	    
 	    createDirectoryRecursively( pathParser.dirname( path ) );
 
-	    var file = fs.createWriteStream( path );
 	    var nok = true;
+	    var optimize = true;
 	    tryCount = 0;
 
 	    async.whilst(
@@ -818,29 +823,39 @@ function downloadFile( url, path, force ) {
 		},
 		function( finished ) {
 		    var request = http.get( url, function( response ) {
-
-			switch( response.headers['content-type'] ) {
-			case 'image/png':
-			    response
-				.pipe( new pngquant( [ 192, '--ordered' ] ) )
-				.on('error', function() { response.pipe( file ); } )
-				.pipe( new pngcrush( [ '-brute', '-l', '9', '-rem', 'alla' ] ) )
-				.on('error', function() { response.pipe( file ); } )
-				.pipe( file );
-			    break;
-			case 'image/jpeg':
-			    response
-				.pipe( new jpegtran( [ '-copy', 'none', '-progressive', '-optimize' ] ) )
-				.on('error', function() { response.pipe( file ); } )
-				.pipe( file );
-			    break;
-			default:
-			    response.pipe( file );
-			    break;
-			}
-
-			nok = false;
-			finished();
+			var writeFile = function( response, finished ) {
+			    var mimeType = optimize ? response.headers['content-type'] : '';
+			    var file = fs.createWriteStream( path );
+			    file.on( 'error', function() { optimize = false; finished( typeof error !== 'undefined' ? error : 'Error in pngquant' ); } )
+			    
+			    switch( mimeType ) {
+			    case 'image/png':
+				response
+				    .pipe( new pngquant( [ 192, '--ordered' ] ) )
+				    .on( 'error', function() { optimize = false; finished( typeof error !== 'undefined' ? error : 'Error in pngquant' ); } )
+				    .pipe( new pngcrush( [ '-brute', '-l', '9', '-rem', 'alla' ] ) )
+				    .on( 'error', function() { optimize = false; finished( typeof error !== 'undefined' ? error : 'Error in pngcrush' ); } )
+				    .pipe( file )
+				    .on( 'error', function() { optimize = false; finished( typeof error !== 'undefined' ? error : 'Error in pipe' ); } );
+				break;
+			    case 'image/jpeg':
+				response
+				    .pipe( new jpegtran( [ '-copy', 'none', '-progressive', '-optimize' ] ) )
+				    .on( 'error', function() { optimize = false; finished( typeof error !== 'undefined' ? error : 'Error in jpegtran' ); } )
+				    .pipe( file )
+				    .on( 'error', function() { optimize = false; finished( typeof error !== 'undefined' ? error : 'Error in pipe' ); } );
+				break;
+			    default:
+				response.pipe( file )
+				    .on( 'error', function() { optimize = false; finished( typeof error !== 'undefined' ? error : 'Error in pipe' ); } );
+				break;
+			    }
+			    
+			    nok = false;
+			    finished();
+			};
+			writeFile = smooth( writeFile, maxParallelRequests, maxParallelRequests, 1800000 );
+			writeFile( response, finished );
 		    });
 		    request.on( 'error', function( error ) {
 			finished( error );
@@ -849,8 +864,9 @@ function downloadFile( url, path, force ) {
 		},
 		function( error ) {
 		    if ( error ) {
-			console.error( 'Unable to download (try nb ' + tryCount++ + ') from ' + decodeURI( url ) + '( ' + error + ' )');
+			console.error( 'Unable to download (try nb ' + tryCount++ + ') from ' + decodeURI( url ) + ' ( ' + error + ' )');
 			if ( maxTryCount && tryCount > maxTryCount ) {
+			    console.error( 'Exit on purpose' );
 			    process.exit( 1 );
 			} else {
 			    sleep.sleep( tryCount );
