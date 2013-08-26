@@ -135,7 +135,7 @@ saveFavicon();
 async.series([
     /* Retrieve the article and redirect Ids */
     function( finished ) { getArticleIds( finished ) }, 
-//    function( finished ) { getRedirectIds( finished ) },
+    function( finished ) { getRedirectIds( finished ) },
     
     /* Save to the disk */
     function( finished ) { saveArticles( finished ) },
@@ -935,10 +935,11 @@ function getArticleBase( articleId ) {
 
 function getSubTitle() {
     console.info( 'Getting sub-title...' );
-    var html = loadUrlSync( webUrl );
-    var doc = domino.createDocument( html );
-    var subTitleNode = doc.getElementById( 'siteSub' );
-    subTitle = subTitleNode.innerHTML;
+    loadUrlSync( webUrl , function( html ) {
+	var doc = domino.createDocument( html );
+	var subTitleNode = doc.getElementById( 'siteSub' );
+	subTitle = subTitleNode.innerHTML;
+    });
 }
 
 function saveFavicon() {
