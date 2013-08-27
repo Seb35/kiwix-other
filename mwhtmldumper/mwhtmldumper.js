@@ -30,10 +30,10 @@ var idBlackList = [ 'purgelink' ];
 var rootPath = 'static/';
 
 /* Parsoid URL */
-var parsoidUrl = 'http://parsoid.wmflabs.org/el/';
+var parsoidUrl = 'http://parsoid.wmflabs.org/id/';
 
 /* Wikipedia/... URL */
-var hostUrl = 'http://el.wikipedia.org/';
+var hostUrl = 'http://id.wikipedia.org/';
 
 /* License footer template code */
 var footerTemplateCode = '<div style="clear:both; background-image:linear-gradient(180deg, #E8E8E8, white); border-top: dashed 2px #AAAAAA; padding: 0.5em 0.5em 2em 0.5em; margin-top: 1em;">This article is issued from <a class="external text" href="{{ webUrl }}{{ articleId }}">Wikipedia</a>. The text is available under the <a class="external text" href="http://creativecommons.org/licenses/by-sa/3.0/">Creative Commons Attribution/Share Alike</a>; additional terms may apply for the media files.</div>';
@@ -116,6 +116,15 @@ var smooth = require('smooth')(maxParallelRequests);
 /* RUNNING CODE *********************/
 /************************************/
 
+/* Error handling */
+process.on('Uncaught exception', function( error ) {
+    if ( finished ) {
+	finished( error );
+    } else {
+	throw error;
+    }
+});
+
 /* Compile redirect template */
 var redirectTemplate = swig.compile( redirectTemplateCode );
 
@@ -135,7 +144,7 @@ saveFavicon();
 async.series([
     /* Retrieve the article and redirect Ids */
     function( finished ) { getArticleIds( finished ) }, 
-//    function( finished ) { getRedirectIds( finished ) },
+    function( finished ) { getRedirectIds( finished ) },
     
     /* Save to the disk */
     function( finished ) { saveArticles( finished ) },
@@ -752,11 +761,6 @@ function loadUrlAsync( url, callback, var1, var2, var3 ) {
 	    return nok;
 	},
 	function( finished ) {
-
-	    process.on('uncaughtException', function( errror ) {
-		finished( typeof error !== 'undefined' ? error : 'Uncaught exception' );
-            });
-
 	    var request = http.get( url, function( response ) {
 		data = '';
 		response.setEncoding( 'utf8' );
@@ -785,6 +789,7 @@ function loadUrlAsync( url, callback, var1, var2, var3 ) {
 		    console.error( 'Exit on purpose' );
 		    process.exit( 1 );
 		} else {
+		    console.error( 'Sleeping for ' + tryCount + 'seconds' );
 		    sleep.sleep( tryCount );
 		}
 	    } else {
@@ -809,6 +814,7 @@ function downloadMedia( url, filename ) {
 }
 
 function downloadFile( url, path, force ) {
+
     fs.exists( path, function ( exists ) {
 	if ( exists && !force ) {
 	    console.info( path + ' already downloaded, download will be skipped.' );
@@ -829,11 +835,7 @@ function downloadFile( url, path, force ) {
 		function( finished ) {
 		    var request = http.get( url, function( response ) {
 			var writeFile = function( response, finished ) {
-
-			    process.on('Uncaught exception', function( errror ) {
-				finished( typeof error !== 'undefined' ? error : 'Uncaught exception' );
-			    });
-
+			    
 			    var mimeType = optimize ? response.headers['content-type'] : '';
 			    var file = fs.createWriteStream( path );
 			    file.on( 'error', function() { optimize = false; finished( typeof error !== 'undefined' ? error : 'Error in pngquant' ); } )
@@ -879,6 +881,7 @@ function downloadFile( url, path, force ) {
 			    console.error( 'Exit on purpose' );
 			    process.exit( 1 );
 			} else {
+			    console.error( 'Sleeping for ' + tryCount + 'seconds' );
 			    sleep.sleep( tryCount );
 			}
 		    }
