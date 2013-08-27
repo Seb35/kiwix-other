@@ -745,6 +745,7 @@ function loadUrlSync( url, callback ) {
 		console.error( 'Exit on purpose' );
 		process.exit( 1 );
 	    } else {
+		console.error( 'Sleeping for ' + tryCount + 'seconds' );
 		sleep.sleep( tryCount );
 	    }
 	}
