@@ -785,9 +785,10 @@ function loadUrlAsync( url, callback, var1, var2, var3 ) {
 	function( error ) {
 	    if ( error ) {
 		console.error( 'Unable to async retrieve (try nb ' + tryCount++ + ') ' + decodeURI( url ) + ' ( ' + error + ' )');
+
 		if ( maxTryCount && tryCount > maxTryCount ) {
 		    console.error( 'Exit on purpose' );
-		    process.exit( 1 );
+		    process.exit( 42 );
 		} else {
 		    console.error( 'Sleeping for ' + tryCount + 'seconds' );
 		    sleep.sleep( tryCount );
@@ -937,10 +938,11 @@ function getArticleBase( articleId ) {
 
 function getSubTitle() {
     console.info( 'Getting sub-title...' );
-    var html = loadUrlSync( webUrl );
-    var doc = domino.createDocument( html );
-    var subTitleNode = doc.getElementById( 'siteSub' );
-    subTitle = subTitleNode.innerHTML;
+    loadUrlSync( webUrl , function( html ) {
+	var doc = domino.createDocument( html );
+	var subTitleNode = doc.getElementById( 'siteSub' );
+	subTitle = subTitleNode.innerHTML;
+    });
 }
 
 function saveFavicon() {
@@ -949,16 +951,23 @@ function saveFavicon() {
 }
 
 function getMainPage() {
-    loadUrlSync( webUrl, function( body ) {
-	var mainPageRegex = /\"wgPageName\"\:\"(.*?)\"/;
-	var parts = mainPageRegex.exec( body );
-	if ( parts[ 1 ] ) {
-	    var html = redirectTemplate( { title:  parts[1].replace( /_/g, ' ' ), target : '../' + getArticleBase( parts[1] ) } );
-	    writeFile( html, rootPath + htmlDirectory + '/index.html' );
-	    articleIds[ parts[ 1 ] ] = undefined;
+    var path = rootPath + htmlDirectory + '/index.html';
+    fs.exists( path, function ( exists ) {
+	if ( exists ) {
+	    console.info( 'Main page already downloaded' );
 	} else {
-	    console.error( 'Unable to get the main page' );
-	    process.exit( 1 );
+	    loadUrlSync( webUrl, function( body ) {
+		var mainPageRegex = /\"wgPageName\"\:\"(.*?)\"/;
+		var parts = mainPageRegex.exec( body );
+		if ( parts[ 1 ] ) {
+		    var html = redirectTemplate( { title:  parts[1].replace( /_/g, ' ' ), target : '../' + getArticleBase( parts[1] ) } );
+		    writeFile( html, rootPath + htmlDirectory + '/index.html' );
+		    articleIds[ parts[ 1 ] ] = undefined;
+		} else {
+		    console.error( 'Unable to get the main page' );
+		    process.exit( 1 );
+		};
+	    });
 	};
     });
 }
