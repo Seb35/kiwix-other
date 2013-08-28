@@ -30,10 +30,10 @@ var idBlackList = [ 'purgelink' ];
 var rootPath = 'static/';
 
 /* Parsoid URL */
-var parsoidUrl = 'http://parsoid.wmflabs.org/id/';
+var parsoidUrl = 'http://parsoid.wmflabs.org/kk/';
 
 /* Wikipedia/... URL */
-var hostUrl = 'http://id.wikipedia.org/';
+var hostUrl = 'http://kk.wikipedia.org/';
 
 /* License footer template code */
 var footerTemplateCode = '<div style="clear:both; background-image:linear-gradient(180deg, #E8E8E8, white); border-top: dashed 2px #AAAAAA; padding: 0.5em 0.5em 2em 0.5em; margin-top: 1em;">This article is issued from <a class="external text" href="{{ webUrl }}{{ articleId }}">Wikipedia</a>. The text is available under the <a class="external text" href="http://creativecommons.org/licenses/by-sa/3.0/">Creative Commons Attribution/Share Alike</a>; additional terms may apply for the media files.</div>';
@@ -116,15 +116,6 @@ var smooth = require('smooth')(maxParallelRequests);
 /* RUNNING CODE *********************/
 /************************************/
 
-/* Error handling */
-process.on('Uncaught exception', function( error ) {
-    if ( finished ) {
-	finished( error );
-    } else {
-	throw error;
-    }
-});
-
 /* Compile redirect template */
 var redirectTemplate = swig.compile( redirectTemplateCode );
 
@@ -144,7 +135,7 @@ saveFavicon();
 async.series([
     /* Retrieve the article and redirect Ids */
     function( finished ) { getArticleIds( finished ) }, 
-    function( finished ) { getRedirectIds( finished ) },
+//    function( finished ) { getRedirectIds( finished ) },
     
     /* Save to the disk */
     function( finished ) { saveArticles( finished ) },
@@ -701,6 +692,17 @@ function getFooterNode( doc, articleId ) {
     return div;
 }
 
+function errorHandler( error ) {
+    console.error( "Error handler" );
+    if ( finished ) {
+	console.error( "Finished error" );
+	finished( error );
+    } else {
+	console.error( "Throwing error" );
+	throw error;
+    }
+}
+
 function writeFile( data, path, callback ) {
     console.info( 'Writing ' + path + '...' );
     
@@ -762,6 +764,8 @@ function loadUrlAsync( url, callback, var1, var2, var3 ) {
 	    return nok;
 	},
 	function( finished ) {
+	    process.on( 'Uncaught exception', errorHandler);
+
 	    var request = http.get( url, function( response ) {
 		data = '';
 		response.setEncoding( 'utf8' );
@@ -784,6 +788,8 @@ function loadUrlAsync( url, callback, var1, var2, var3 ) {
 	    request.end();
 	},
 	function( error ) {
+	    process.removeListener("uncaughtException", errorHandler);
+
 	    if ( error ) {
 		console.error( 'Unable to async retrieve (try nb ' + tryCount++ + ') ' + decodeURI( url ) + ' ( ' + error + ' )');
 
@@ -794,6 +800,7 @@ function loadUrlAsync( url, callback, var1, var2, var3 ) {
 		    console.error( 'Sleeping for ' + tryCount + 'seconds' );
 		    sleep.sleep( tryCount );
 		}
+		loadUrlAsync( url, callback, var1, var2, var3 );
 	    } else {
 		callback( data, var1, var2, var3 );		
 	    }
@@ -835,6 +842,7 @@ function downloadFile( url, path, force ) {
 		    return nok;
 		},
 		function( finished ) {
+		    process.on( 'Uncaught exception', errorHandler);
 		    var request = http.get( url, function( response ) {
 			var writeFile = function( response, finished ) {
 			    
@@ -868,7 +876,7 @@ function downloadFile( url, path, force ) {
 			    nok = false;
 			    finished();
 			};
-			writeFile = smooth( writeFile, maxParallelRequests, maxParallelRequests, 1800000 );
+//			writeFile = smooth( writeFile, maxParallelRequests, maxParallelRequests, 1800000 );
 			writeFile( response, finished );
 		    });
 		    request.on( 'error', function( error ) {
@@ -877,6 +885,7 @@ function downloadFile( url, path, force ) {
 		    request.end();
 		},
 		function( error ) {
+		    process.removeListener("uncaughtException", errorHandler);
 		    if ( error ) {
 			console.error( 'Unable to download (try nb ' + tryCount++ + ') from ' + decodeURI( url ) + ' ( ' + error + ' )');
 			if ( maxTryCount && tryCount > maxTryCount ) {
@@ -886,6 +895,7 @@ function downloadFile( url, path, force ) {
 			    console.error( 'Sleeping for ' + tryCount + 'seconds' );
 			    sleep.sleep( tryCount );
 			}
+			downloadFile( url, path, force );
 		    }
 		}
 	    );
