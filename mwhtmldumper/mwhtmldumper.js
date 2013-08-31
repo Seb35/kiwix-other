@@ -30,10 +30,10 @@ var idBlackList = [ 'purgelink' ];
 var rootPath = 'static/';
 
 /* Parsoid URL */
-var parsoidUrl = 'http://parsoid.wmflabs.org/ru/';
+var parsoidUrl = 'http://parsoid.wmflabs.org/hi/';
 
 /* Wikipedia/... URL */
-var hostUrl = 'http://ru.wikipedia.org/';
+var hostUrl = 'http://hi.wikipedia.org/';
 
 /* License footer template code */
 var footerTemplateCode = '<div style="clear:both; background-image:linear-gradient(180deg, #E8E8E8, white); border-top: dashed 2px #AAAAAA; padding: 0.5em 0.5em 2em 0.5em; margin-top: 1em;">This article is issued from <a class="external text" href="{{ webUrl }}{{ articleId }}">Wikipedia</a>. The text is available under the <a class="external text" href="http://creativecommons.org/licenses/by-sa/3.0/">Creative Commons Attribution/Share Alike</a>; additional terms may apply for the media files.</div>';
@@ -764,16 +764,10 @@ function loadUrlAsync( url, callback, var1, var2, var3 ) {
 	},
 	function( finished ) {
 	    finishedGlobal = finished;
-	    process.on( 'uncaughtException', finishedGlobal );
 	    var request = http.get( url, function( response ) {
 		data = '';
 		response.setEncoding( 'utf8' );
 		response
-		    .on( 'socket', function ( socket ) {
-			socket.on( 'error', function( error ) {
-			    finished( error );
-			});
-		    })
 		    .on( 'data', function ( chunk ) {
 			data += chunk;
 		    })
@@ -790,6 +784,7 @@ function loadUrlAsync( url, callback, var1, var2, var3 ) {
 		    finished( error );
 		})
 		.on( 'socket', function ( socket ) {
+		    socket.setMaxListeners( 200 );
 		    socket.on( 'error', function( error ) {
 			finished( error );
 		    });
@@ -797,7 +792,6 @@ function loadUrlAsync( url, callback, var1, var2, var3 ) {
 	    request.end();
 	},
 	function( error ) {
-	    process.removeListener( 'uncaughtException', finishedGlobal );
 	    if ( error ) {
 		console.error( 'Unable to async retrieve (try nb ' + tryCount++ + ') ' + decodeURI( url ) + ' ( ' + error + ' )');
 		if ( maxTryCount && tryCount > maxTryCount ) {
@@ -829,6 +823,12 @@ function downloadMedia( url, filename ) {
     downloadFile( url, getMediaPath( filename ), true );
 }
 
+process.on( 'uncaughtException', function( error ) {
+    console.trace( error );
+    process.exit( 42 );
+});
+
+
 function downloadFile( url, path, force ) {
     fs.exists( path, function ( exists ) {
 	if ( exists && !force ) {
@@ -850,18 +850,11 @@ function downloadFile( url, path, force ) {
 		},
 		function( finished ) {
 		    finishedGlobal = finished;
-		    process.on( 'uncaughtException', finishedGlobal );
 		    var request = http.get( url, function( response ) {
 			var writeFile = function( response, finished ) {
 			    var mimeType = optimize ? response.headers['content-type'] : '';
 			    var file = fs.createWriteStream( path );
 			    file.on( 'error', function( error ) { optimize = false; finished( error ); } )
-			    response
-				.on( 'socket', function ( socket ) {
-				    socket.on( 'error', function( error ) {
-					finished( error );
-				    });
-				});
 
 			    switch( mimeType ) {
 			    case 'image/png':
@@ -897,6 +890,7 @@ function downloadFile( url, path, force ) {
 			    finished( error );
 			})
 			.on( 'socket', function ( socket ) {
+			    socket.setMaxListeners( 200 );
 			    socket.on( 'error', function( error ) {
 				finished( error );
 			    });
@@ -904,7 +898,6 @@ function downloadFile( url, path, force ) {
 		    request.end();
 		},
 		function( error ) {
-		    process.removeListener( 'uncaughtException', finishedGlobal );
 		    if ( error ) {
 			console.error( 'Unable to download (try nb ' + tryCount++ + ') from ' + decodeURI( url ) + ' ( ' + error + ' )');
 			if ( maxTryCount && tryCount > maxTryCount ) {
