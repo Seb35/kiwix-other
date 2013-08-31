@@ -30,10 +30,10 @@ var idBlackList = [ 'purgelink' ];
 var rootPath = 'static/';
 
 /* Parsoid URL */
-var parsoidUrl = 'http://parsoid.wmflabs.org/jv/';
+var parsoidUrl = 'http://parsoid.wmflabs.org/ru/';
 
 /* Wikipedia/... URL */
-var hostUrl = 'http://jv.wikipedia.org/';
+var hostUrl = 'http://ru.wikipedia.org/';
 
 /* License footer template code */
 var footerTemplateCode = '<div style="clear:both; background-image:linear-gradient(180deg, #E8E8E8, white); border-top: dashed 2px #AAAAAA; padding: 0.5em 0.5em 2em 0.5em; margin-top: 1em;">This article is issued from <a class="external text" href="{{ webUrl }}{{ articleId }}">Wikipedia</a>. The text is available under the <a class="external text" href="http://creativecommons.org/licenses/by-sa/3.0/">Creative Commons Attribution/Share Alike</a>; additional terms may apply for the media files.</div>';
@@ -135,7 +135,7 @@ saveFavicon();
 async.series([
     /* Retrieve the article and redirect Ids */
     function( finished ) { getArticleIds( finished ) }, 
-    function( finished ) { getRedirectIds( finished ) },
+//    function( finished ) { getRedirectIds( finished ) },
     
     /* Save to the disk */
     function( finished ) { saveArticles( finished ) },
@@ -697,17 +697,6 @@ function getFooterNode( doc, articleId ) {
     return div;
 }
 
-function errorHandler( error ) {
-    console.error( 'Error handler' );
-    if ( finished ) {
-	console.error( 'Finished error' );
-	finished( error );
-    } else {
-	console.error( 'Throwing error' );
-	throw error;
-    }
-}
-
 function writeFile( data, path, callback ) {
     console.info( 'Writing ' + path + '...' );
     
@@ -731,19 +720,6 @@ function writeFile( data, path, callback ) {
 	    callback();
 	}
     });
-
-    /*
-    fs.writeFile( path, data, function( error ) {
-	if ( error ) {
-	    throw error;
-	    process.exit( 1 );
-	} else {
-	    if (callback) {
-		callback();
-	    }
-	}
-    });
-    */
 }
 
 function loadUrlSync( url, callback ) {
@@ -779,6 +755,7 @@ function loadUrlSync( url, callback ) {
 function loadUrlAsync( url, callback, var1, var2, var3 ) {
     tryCount = 0;
     var nok = true;
+    var finishedGlobal;
     var data;
 
     async.whilst(
@@ -786,21 +763,23 @@ function loadUrlAsync( url, callback, var1, var2, var3 ) {
 	    return nok;
 	},
 	function( finished ) {
+	    finishedGlobal = finished;
+	    process.on( 'uncaughtException', finishedGlobal );
 	    var request = http.get( url, function( response ) {
 		data = '';
 		response.setEncoding( 'utf8' );
 		response
+		    .on( 'socket', function ( socket ) {
+			socket.on( 'error', function( error ) {
+			    finished( error );
+			});
+		    })
 		    .on( 'data', function ( chunk ) {
 			data += chunk;
 		    })
 		    .on( 'end', function () {
 			nok = false;
 			finished();
-		    })
-		    .on( 'socket', function ( socket ) {
-			socket.on( 'error', function( error ) {
-			    finished( error );
-			});
 		    })
 		    .on( 'error', function() { 
 			finished( error );
@@ -818,6 +797,7 @@ function loadUrlAsync( url, callback, var1, var2, var3 ) {
 	    request.end();
 	},
 	function( error ) {
+	    process.removeListener( 'uncaughtException', finishedGlobal );
 	    if ( error ) {
 		console.error( 'Unable to async retrieve (try nb ' + tryCount++ + ') ' + decodeURI( url ) + ' ( ' + error + ' )');
 		if ( maxTryCount && tryCount > maxTryCount ) {
@@ -860,6 +840,7 @@ function downloadFile( url, path, force ) {
 	    createDirectoryRecursively( pathParser.dirname( path ) );
 
 	    var nok = true;
+	    var finishedGlobal;
 	    var optimize = true;
 	    tryCount = 0;
 
@@ -868,12 +849,20 @@ function downloadFile( url, path, force ) {
 		    return nok;
 		},
 		function( finished ) {
+		    finishedGlobal = finished;
+		    process.on( 'uncaughtException', finishedGlobal );
 		    var request = http.get( url, function( response ) {
 			var writeFile = function( response, finished ) {
 			    var mimeType = optimize ? response.headers['content-type'] : '';
 			    var file = fs.createWriteStream( path );
 			    file.on( 'error', function( error ) { optimize = false; finished( error ); } )
-			    
+			    response
+				.on( 'socket', function ( socket ) {
+				    socket.on( 'error', function( error ) {
+					finished( error );
+				    });
+				});
+
 			    switch( mimeType ) {
 			    case 'image/png':
 				response
@@ -915,7 +904,7 @@ function downloadFile( url, path, force ) {
 		    request.end();
 		},
 		function( error ) {
-		    process.removeListener("uncaughtException", errorHandler);
+		    process.removeListener( 'uncaughtException', finishedGlobal );
 		    if ( error ) {
 			console.error( 'Unable to download (try nb ' + tryCount++ + ') from ' + decodeURI( url ) + ' ( ' + error + ' )');
 			if ( maxTryCount && tryCount > maxTryCount ) {
