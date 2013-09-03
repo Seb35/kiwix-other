@@ -30,10 +30,10 @@ var idBlackList = [ 'purgelink' ];
 var rootPath = 'static/';
 
 /* Parsoid URL */
-var parsoidUrl = 'http://parsoid.wmflabs.org/hi/';
+var parsoidUrl = 'http://parsoid.wmflabs.org/ro/';
 
 /* Wikipedia/... URL */
-var hostUrl = 'http://hi.wikipedia.org/';
+var hostUrl = 'http://ro.wikipedia.org/';
 
 /* License footer template code */
 var footerTemplateCode = '<div style="clear:both; background-image:linear-gradient(180deg, #E8E8E8, white); border-top: dashed 2px #AAAAAA; padding: 0.5em 0.5em 2em 0.5em; margin-top: 1em;">This article is issued from <a class="external text" href="{{ webUrl }}{{ articleId }}">Wikipedia</a>. The text is available under the <a class="external text" href="http://creativecommons.org/licenses/by-sa/3.0/">Creative Commons Attribution/Share Alike</a>; additional terms may apply for the media files.</div>';
@@ -77,7 +77,7 @@ var templateHtml = function(){/*
 
 var maxParallelRequests = 6;
 var maxTryCount = 0;
-var tryCount = 0;
+var tryCount = {};
 var ltr = true;
 var autoAlign = ltr ? 'left' : 'right';
 var revAutoAlign = ltr ? 'right' : 'left';
@@ -723,7 +723,7 @@ function writeFile( data, path, callback ) {
 }
 
 function loadUrlSync( url, callback ) {
-    tryCount = 0;
+    tryCount[ url ] = 0;
     do {
 	try {
 	    var req = httpsync.get({ url : url });
@@ -732,6 +732,7 @@ function loadUrlSync( url, callback ) {
 		console.info( "Redirect detected, load " + decodeURI( res.headers.location ) );
 		return loadUrlSync( res.headers.location, callback );
 	    } else {
+		delete tryCount[ url ];
 		if ( callback ) {
 		    callback( res.data.toString('utf8') );
 		    break;
@@ -740,23 +741,23 @@ function loadUrlSync( url, callback ) {
 		}
 	    }
 	} catch ( error ) {
-	    console.error( 'Unable to sync retrieve (try nb ' + tryCount++ + ') ' + decodeURI( url ) + ' ( ' + error + ' )');
-	    if ( maxTryCount && tryCount > maxTryCount ) {
+	    console.error( 'Unable to sync retrieve (try nb ' + tryCount[ url ]++ + ') ' + decodeURI( url ) + ' ( ' + error + ' )');
+	    if ( maxTryCount && tryCount[ url ] > maxTryCount ) {
 		console.error( 'Exit on purpose' );
 		process.exit( 1 );
 	    } else {
-		console.error( 'Sleeping for ' + tryCount + ' seconds' );
-		sleep.sleep( tryCount );
+		console.error( 'Sleeping for ' + tryCount[ url ] + ' seconds' );
+		sleep.sleep( tryCount[ url ] );
 	    }
 	}
     } while ( true );
 }
 
 function loadUrlAsync( url, callback, var1, var2, var3 ) {
-    tryCount = 0;
     var nok = true;
     var finishedGlobal;
     var data;
+    tryCount[ url ] = tryCount[ url ] ? tryCount[ url ] += 1 : 1;
 
     async.whilst(
 	function() {
@@ -780,29 +781,35 @@ function loadUrlAsync( url, callback, var1, var2, var3 ) {
 		    });
 	    });
 	    request
-		.on( 'error', function( error ) {
+		.on( 'clientError', function( error ) {
 		    finished( error );
 		})
+		.on( 'error', function( error ) {
+		    finished( error );
+		});
+/*
 		.on( 'socket', function ( socket ) {
 		    socket.setMaxListeners( 200 );
 		    socket.on( 'error', function( error ) {
 			finished( error );
 		    });
 		});
+*/
 	    request.end();
 	},
 	function( error ) {
 	    if ( error ) {
-		console.error( 'Unable to async retrieve (try nb ' + tryCount++ + ') ' + decodeURI( url ) + ' ( ' + error + ' )');
-		if ( maxTryCount && tryCount > maxTryCount ) {
+		console.error( 'Unable to async retrieve (try nb ' + tryCount[ url ] + ') ' + decodeURI( url ) + ' ( ' + error + ' )');
+		if ( maxTryCount && tryCount[ url ] > maxTryCount ) {
 		    console.error( 'Exit on purpose' );
 		    process.exit( 1 );
 		} else {
-		    console.info( 'Sleeping for ' + tryCount + ' seconds' );
-		    sleep.sleep( tryCount );
+		    console.info( 'Sleeping for ' + tryCount[ url ] + ' seconds' );
+		    sleep.sleep( tryCount[ url ] );
 		}
 		loadUrlAsync( url, callback, var1, var2, var3 );
 	    } else {
+		delete tryCount[ url ];
 		callback( data, var1, var2, var3 );		
 	    }
 	}
@@ -842,7 +849,7 @@ function downloadFile( url, path, force ) {
 	    var nok = true;
 	    var finishedGlobal;
 	    var optimize = true;
-	    tryCount = 0;
+	    tryCount[ url ] = tryCount[ url ] ? tryCount[ url ] += 1 : 1;
 
 	    async.whilst(
 		function() {
@@ -886,28 +893,35 @@ function downloadFile( url, path, force ) {
 			writeFile( response, finished );
 		    });
 		    request
-			.on( 'error', function( error ) {
+			.on( 'clientError', function( error ) {
 			    finished( error );
 			})
+			.on( 'error', function( error ) {
+			    finished( error );
+			});
+/*
 			.on( 'socket', function ( socket ) {
 			    socket.setMaxListeners( 200 );
 			    socket.on( 'error', function( error ) {
 				finished( error );
 			    });
 			});
+*/
 		    request.end();
 		},
 		function( error ) {
 		    if ( error ) {
-			console.error( 'Unable to download (try nb ' + tryCount++ + ') from ' + decodeURI( url ) + ' ( ' + error + ' )');
-			if ( maxTryCount && tryCount > maxTryCount ) {
+			console.error( 'Unable to download (try nb ' + tryCount[ url ] + ') from ' + decodeURI( url ) + ' ( ' + error + ' )');
+			if ( maxTryCount && tryCount[ url ] > maxTryCount ) {
 			    console.error( 'Exit on purpose' );
 			    process.exit( 1 );
 			} else {
-			    console.error( 'Sleeping for ' + tryCount + 'seconds' );
+			    console.error( 'Sleeping for ' + tryCount[ url ] + 'seconds' );
 			    sleep.sleep( tryCount );
 			}
 			downloadFile( url, path, force );
+		    } else {
+			delete tryCount[ url ];
 		    }
 		}
 	    );
