@@ -30,10 +30,10 @@ var idBlackList = [ 'purgelink' ];
 var rootPath = 'static/';
 
 /* Parsoid URL */
-var parsoidUrl = 'http://parsoid.wmflabs.org/ro/';
+var parsoidUrl = 'http://parsoid.wmflabs.org/ru/';
 
 /* Wikipedia/... URL */
-var hostUrl = 'http://ro.wikipedia.org/';
+var hostUrl = 'http://ru.wikipedia.org/';
 
 /* License footer template code */
 var footerTemplateCode = '<div style="clear:both; background-image:linear-gradient(180deg, #E8E8E8, white); border-top: dashed 2px #AAAAAA; padding: 0.5em 0.5em 2em 0.5em; margin-top: 1em;">This article is issued from <a class="external text" href="{{ webUrl }}{{ articleId }}">Wikipedia</a>. The text is available under the <a class="external text" href="http://creativecommons.org/licenses/by-sa/3.0/">Creative Commons Attribution/Share Alike</a>; additional terms may apply for the media files.</div>';
@@ -75,7 +75,7 @@ var templateHtml = function(){/*
 /* SYSTEM VARIABLE SECTION **********/
 /************************************/
 
-var maxParallelRequests = 6;
+var maxParallelRequests = 12;
 var maxTryCount = 0;
 var tryCount = {};
 var ltr = true;
@@ -124,7 +124,7 @@ http.globalAgent.maxSockets = maxParallelRequests;
 
 /* Initialization */
 getNamespaces();
-getMainPage();
+//getMainPage();
 getSubTitle();
 createDirectories();
 saveJavascript();
@@ -136,7 +136,7 @@ async.series([
     /* Retrieve the article and redirect Ids */
     function( finished ) { getArticleIds( finished ) }, 
 //    function( finished ) { getRedirectIds( finished ) },
-    
+   
     /* Save to the disk */
     function( finished ) { saveArticles( finished ) },
     function( finished ) { saveRedirects( finished ) }
@@ -227,6 +227,11 @@ function saveArticle( html, articleId ) {
 	var a = as[i];
 	var rel = a.getAttribute( 'rel' );
 	var href = a.getAttribute( 'href' );
+
+	if ( !href ) {
+	    deleteNode( a );
+	    continue;
+	}
 
 	if ( rel ) {
 	    /* Add 'external' class to external links */
@@ -582,10 +587,10 @@ function saveStylesheet() {
 /* Get ids */
 function getArticleIds( finished ) {
     var next = "";
-    var url;
+
     do {
 	console.info( 'Getting article ids' + ( next ? ' (from ' + next  + ')' : '' ) + '...' );
-	url = apiUrl + 'action=query&generator=allpages&gapfilterredir=nonredirects&gaplimit=500&gapnamespace=0&format=json&gapcontinue=' + encodeURIComponent( next );
+	var url = apiUrl + 'action=query&generator=allpages&gapfilterredir=nonredirects&gaplimit=500&gapnamespace=0&format=json&gapcontinue=' + encodeURIComponent( next );
 	var body = loadUrlSync( url );
 	var entries = JSON.parse( body )['query']['pages'];
 	Object.keys(entries).map( function( key ) {
@@ -594,6 +599,7 @@ function getArticleIds( finished ) {
 	});
 	next = JSON.parse( body )['query-continue'] ? JSON.parse( body )['query-continue']['allpages']['gapcontinue'] : undefined;
     } while ( next );
+
     finished();
 }
 
@@ -766,35 +772,56 @@ function loadUrlAsync( url, callback, var1, var2, var3 ) {
 	function( finished ) {
 	    finishedGlobal = finished;
 	    var request = http.get( url, function( response ) {
-		data = '';
-		response.setEncoding( 'utf8' );
-		response
-		    .on( 'data', function ( chunk ) {
-			data += chunk;
-		    })
-		    .on( 'end', function () {
-			nok = false;
-			finished();
-		    })
-		    .on( 'error', function() { 
+		response.on( 'socket', function ( socket ) {
+		    socket.on( 'close', function( error ) {
 			finished( error );
 		    });
-	    });
-	    request
-		.on( 'clientError', function( error ) {
-		    finished( error );
-		})
-		.on( 'error', function( error ) {
-		    finished( error );
-		});
-/*
-		.on( 'socket', function ( socket ) {
-		    socket.setMaxListeners( 200 );
 		    socket.on( 'error', function( error ) {
 			finished( error );
 		    });
+		    socket.on( 'timeout', function() {
+			finished( "Pipe has timeouted..." );
+		    });
 		});
-*/
+		response.on( 'error', function( error ) {
+		    finished( error );
+		});
+
+		data = '';
+		response.setEncoding( 'utf8' );
+		response.on( 'data', function ( chunk ) {
+			data += chunk;
+		});
+		response.on( 'close', function () {
+		    nok = false;
+		    finished();
+		});
+		response.on( 'end', function () {
+		    nok = false;
+		    if ( nok ) {
+			finished();
+		    }
+		});
+	    });
+
+	    request.on( 'error', function( error ) {
+		finished( error );
+	    });
+	    request.on( 'close', function() {
+		finished();
+	    });
+	    request.on( 'socket', function ( socket ) {
+		socket.on( 'close', function( error ) {
+		    finished( error );
+		});
+		socket.on( 'error', function( error ) {
+		    finished( error );
+		});
+		socket.on( 'timeout', function() {
+		    finished( "Pipe has timeouted..." );
+		});
+	    });
+
 	    request.end();
 	},
 	function( error ) {
@@ -832,6 +859,7 @@ function downloadMedia( url, filename ) {
 
 process.on( 'uncaughtException', function( error ) {
     console.trace( error );
+    throw error;
     process.exit( 42 );
 });
 
@@ -848,7 +876,7 @@ function downloadFile( url, path, force ) {
 
 	    var nok = true;
 	    var finishedGlobal;
-	    var optimize = true;
+	    var optimize = false;
 	    tryCount[ url ] = tryCount[ url ] ? tryCount[ url ] += 1 : 1;
 
 	    async.whilst(
@@ -862,6 +890,24 @@ function downloadFile( url, path, force ) {
 			    var mimeType = optimize ? response.headers['content-type'] : '';
 			    var file = fs.createWriteStream( path );
 			    file.on( 'error', function( error ) { optimize = false; finished( error ); } )
+			    
+			    response.on( 'socket', function ( socket ) {
+				socket.on( 'close', function( error ) {
+				    finished( error );
+				});
+				socket.on( 'timeout', function() {
+				    finished( "Pipe has timeouted..." );
+				});
+				socket.on( 'error', function( error ) {
+				    finished( error );
+				});
+			    });
+			    response.on( 'error', function( error ) {
+				finished( error );
+			    });
+			    response.on( 'close', function() {
+				finished();
+			    });
 
 			    switch( mimeType ) {
 			    case 'image/png':
@@ -892,21 +938,25 @@ function downloadFile( url, path, force ) {
 			writeFile = smooth( writeFile, maxParallelRequests, maxParallelRequests, 180000 );
 			writeFile( response, finished );
 		    });
-		    request
-			.on( 'clientError', function( error ) {
-			    finished( error );
-			})
-			.on( 'error', function( error ) {
+
+		    request.on( 'error', function( error ) {
+			finished( error );
+		    });
+		    request.on( 'close', function() {
+			finished();
+		    });
+		    request.on( 'socket', function ( socket ) {
+			socket.on( 'close', function( error ) {
 			    finished( error );
 			});
-/*
-			.on( 'socket', function ( socket ) {
-			    socket.setMaxListeners( 200 );
-			    socket.on( 'error', function( error ) {
-				finished( error );
-			    });
+			socket.on( 'error', function( error ) {
+			    finished( error );
 			});
-*/
+			socket.on( 'timeout', function() {
+			    finished( "Pipe has timeouted..." );
+			});
+		    });
+
 		    request.end();
 		},
 		function( error ) {
@@ -975,7 +1025,7 @@ function getArticleBase( articleId ) {
 
 function getSubTitle() {
     console.info( 'Getting sub-title...' );
-    loadUrlSync( webUrl , function( html ) {
+    loadUrlSync( webUrl + 'wiki', function( html ) {
 	var doc = domino.createDocument( html );
 	var subTitleNode = doc.getElementById( 'siteSub' );
 	subTitle = subTitleNode.innerHTML;
