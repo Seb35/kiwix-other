@@ -30,10 +30,13 @@ var idBlackList = [ 'purgelink' ];
 var rootPath = 'static/';
 
 /* Parsoid URL */
-var parsoidUrl = 'http://parsoid.wmflabs.org/ru/';
+var parsoidUrl = 'http://parsoid.wmflabs.org/bm/';
 
 /* Wikipedia/... URL */
-var hostUrl = 'http://ru.wikipedia.org/';
+var hostUrl = 'http://bm.wikipedia.org/';
+
+/* Namespaces to mirror */
+var namespacesToMirror = [ '' ];
 
 /* License footer template code */
 var footerTemplateCode = '<div style="clear:both; background-image:linear-gradient(180deg, #E8E8E8, white); border-top: dashed 2px #AAAAAA; padding: 0.5em 0.5em 2em 0.5em; margin-top: 1em;">This article is issued from <a class="external text" href="{{ webUrl }}{{ articleId }}">Wikipedia</a>. The text is available under the <a class="external text" href="http://creativecommons.org/licenses/by-sa/3.0/">Creative Commons Attribution/Share Alike</a>; additional terms may apply for the media files.</div>';
@@ -83,7 +86,6 @@ var autoAlign = ltr ? 'left' : 'right';
 var revAutoAlign = ltr ? 'right' : 'left';
 var subTitle = "From Wikipedia, the free encyclopedia";
 var articleIds = {};
-var namespaceIds = {};
 var namespaces = {};
 var redirectIds = {};
 var mediaIds = {};
@@ -123,9 +125,6 @@ var redirectTemplate = swig.compile( redirectTemplateCode );
 http.globalAgent.maxSockets = maxParallelRequests;
 
 /* Initialization */
-getNamespaces();
-//getMainPage();
-getSubTitle();
 createDirectories();
 saveJavascript();
 saveStylesheet();
@@ -133,11 +132,11 @@ saveFavicon();
 
 /* Get content */
 async.series([
-    /* Retrieve the article and redirect Ids */
+    function( finished ) { getNamespaces( finished ) },
+    function( finished ) { getMainPage( finished ) },
+    function( finished ) { getSubTitle( finished ) },
     function( finished ) { getArticleIds( finished ) }, 
-//    function( finished ) { getRedirectIds( finished ) },
-   
-    /* Save to the disk */
+    function( finished ) { getRedirectIds( finished ) },
     function( finished ) { saveArticles( finished ) },
     function( finished ) { saveRedirects( finished ) }
 ]);
@@ -160,6 +159,7 @@ function saveRedirects( finished ) {
 	    console.error( 'Error in saveRedirects callback: ' + err );
 	}
     });
+
     finished();
 }
 
@@ -484,7 +484,7 @@ function isMirrored( id ) {
     if ( id.indexOf(':') >= 0 ) {
 	var tmpNamespace = id.substring( 0, id.indexOf(':') ).replace( / /g, '_');
 	var tmpNamespaceNumber = namespaces[tmpNamespace];
-	if ( tmpNamespaceNumber && tmpNamespaceNumber in namespaceIds ) {
+	if ( tmpNamespaceNumber && tmpNamespaceNumber in namespaces ) {
 	    return true;
 	}
     }
@@ -586,19 +586,21 @@ function saveStylesheet() {
 
 /* Get ids */
 function getArticleIds( finished ) {
-    var next = "";
+    namespacesToMirror.map( function( namespace ) {
+	var next = "";
 
-    do {
-	console.info( 'Getting article ids' + ( next ? ' (from ' + next  + ')' : '' ) + '...' );
-	var url = apiUrl + 'action=query&generator=allpages&gapfilterredir=nonredirects&gaplimit=500&gapnamespace=0&format=json&gapcontinue=' + encodeURIComponent( next );
-	var body = loadUrlSync( url );
-	var entries = JSON.parse( body )['query']['pages'];
-	Object.keys(entries).map( function( key ) {
-	    var entry = entries[key];
-	    articleIds[entry['title'].replace( / /g, '_' )] = undefined;
-	});
-	next = JSON.parse( body )['query-continue'] ? JSON.parse( body )['query-continue']['allpages']['gapcontinue'] : undefined;
-    } while ( next );
+	do {
+	    console.info( 'Getting article ids' + ( next ? ' (from ' + ( namespace ? namespace + ':' : '') + next  + ')' : '' ) + '...' );
+	    var url = apiUrl + 'action=query&generator=allpages&gapfilterredir=nonredirects&gaplimit=500&gapnamespace=' + namespaces[ namespace ] + '&format=json&gapcontinue=' + encodeURIComponent( next );
+	    var body = loadUrlSync( url );
+	    var entries = JSON.parse( body )['query']['pages'];
+	    Object.keys( entries ).map( function( key ) {
+		var entry = entries[key];
+		articleIds[entry['title'].replace( / /g, '_' )] = undefined;
+	    });
+	    next = JSON.parse( body )['query-continue'] ? JSON.parse( body )['query-continue']['allpages']['gapcontinue'] : undefined;
+	} while ( next );
+    });
 
     finished();
 }
@@ -620,10 +622,11 @@ function getRedirectIds( finished ) {
 		    redirectIds[entry['title'].replace( / /g, '_' )] = articleId;
 		});
 		finished();
-		} catch( error ) {
-		    finished( error );
-		}
-	    if (!getRedirectIdsCount) {
+	    } catch( error ) {
+		finished( error );
+	    }
+   
+	    if ( getRedirectIdsCount <= 0 ) {
 		getRedirectIdsFinished();
 	    }
 	}, articleId);
@@ -890,7 +893,6 @@ function downloadFile( url, path, force ) {
 			    var mimeType = optimize ? response.headers['content-type'] : '';
 			    var file = fs.createWriteStream( path );
 			    file.on( 'error', function( error ) { optimize = false; finished( error ); } )
-			    
 			    response.on( 'socket', function ( socket ) {
 				socket.on( 'close', function( error ) {
 				    finished( error );
@@ -1023,12 +1025,13 @@ function getArticleBase( articleId ) {
 	( dirBase[2] || '_' ) + '/' + ( dirBase[3] || '_' ) + '/' + filename + '.html';
 }
 
-function getSubTitle() {
+function getSubTitle( finished ) {
     console.info( 'Getting sub-title...' );
-    loadUrlSync( webUrl + 'wiki', function( html ) {
+    loadUrlSync( webUrl, function( html ) {
 	var doc = domino.createDocument( html );
 	var subTitleNode = doc.getElementById( 'siteSub' );
 	subTitle = subTitleNode.innerHTML;
+	finished();
     });
 }
 
@@ -1037,50 +1040,49 @@ function saveFavicon() {
     downloadFile( 'http://sourceforge.net/p/kiwix/tools/ci/master/tree/dumping_tools/data/wikipedia-icon-48x48.png?format=raw', rootPath + mediaDirectory + '/favicon.png' );
 }
 
-function getMainPage() {
+function getMainPage( finished ) {
+    console.info( 'Getting main page...' );
     var path = rootPath + htmlDirectory + '/index.html';
-    fs.exists( path, function ( exists ) {
-	if ( exists ) {
-	    console.info( 'Main page already downloaded' );
+    loadUrlSync( webUrl, function( body ) {
+	var mainPageRegex = /\"wgPageName\"\:\"(.*?)\"/;
+	var parts = mainPageRegex.exec( body );
+	if ( parts[ 1 ] ) {
+	    var html = redirectTemplate( { title:  parts[1].replace( /_/g, ' ' ), target : '../' + getArticleBase( parts[1] ) } );
+	    writeFile( html, rootPath + htmlDirectory + '/index.html' );
+	    articleIds[ parts[ 1 ] ] = undefined;
 	} else {
-	    loadUrlSync( webUrl, function( body ) {
-		var mainPageRegex = /\"wgPageName\"\:\"(.*?)\"/;
-		var parts = mainPageRegex.exec( body );
-		if ( parts[ 1 ] ) {
-		    var html = redirectTemplate( { title:  parts[1].replace( /_/g, ' ' ), target : '../' + getArticleBase( parts[1] ) } );
-		    writeFile( html, rootPath + htmlDirectory + '/index.html' );
-		    articleIds[ parts[ 1 ] ] = undefined;
-		} else {
-		    console.error( 'Unable to get the main page' );
-		    process.exit( 1 );
-		};
-	    });
+	    console.error( 'Unable to get the main page' );
+	    process.exit( 1 );
 	};
+	finished();
     });
 }
 
-function getNamespaces() {
+function getNamespaces( finished ) {
     var url = apiUrl + 'action=query&meta=siteinfo&siprop=namespaces|namespacealiases&format=json';
     var body = loadUrlSync( url );
     var types = [ 'namespaces', 'namespacealiases' ];
     types.map( function( type ) {
 	var entries = JSON.parse( body )['query'][type];
 	Object.keys(entries).map( function( key ) {
-	   var entry = entries[key];
-	   var name = entry['*'].replace( / /g, '_');
-	   if ( name ) {
-	       var number =  entry['id'];
-	       namespaces[ lcFirst( name ) ] = number;
-	       namespaces[ ucFirst( name ) ] = number;
-
-	       var canonical = entry['canonical'] ? entry['canonical'].replace( / /g, '_' ) : '';
-	       if ( canonical ) {
-		   namespaces[ lcFirst( canonical ) ] = number;
-		   namespaces[ ucFirst( canonical ) ] = number;
-	       }
-	   }
-        });
+	    var entry = entries[key];
+	    var name = entry['*'].replace( / /g, '_');
+	    if ( name ) {
+		var number =  entry['id'];
+		namespaces[ lcFirst( name ) ] = number;
+		namespaces[ ucFirst( name ) ] = number;
+		
+		var canonical = entry['canonical'] ? entry['canonical'].replace( / /g, '_' ) : '';
+		if ( canonical ) {
+		    namespaces[ lcFirst( canonical ) ] = number;
+		    namespaces[ ucFirst( canonical ) ] = number;
+		}
+	    };
+	});
     });
+    namespaces[ '' ] = 0;
+
+    finished();
 }
 
 function lcFirst( str ) {
