@@ -30,16 +30,16 @@ var idBlackList = [ 'purgelink' ];
 var rootPath = 'static/';
 
 /* Parsoid URL */
-var parsoidUrl = 'http://parsoid.wmflabs.org/bm/';
+var parsoidUrl = 'http://parsoid.wmflabs.org/frwikisource/';
 
 /* Wikipedia/... URL */
-var hostUrl = 'http://bm.wikipedia.org/';
+var hostUrl = 'http://fr.wikisource.org/';
 
 /* Namespaces to mirror */
 var namespacesToMirror = [ '' ];
 
 /* License footer template code */
-var footerTemplateCode = '<div style="clear:both; background-image:linear-gradient(180deg, #E8E8E8, white); border-top: dashed 2px #AAAAAA; padding: 0.5em 0.5em 2em 0.5em; margin-top: 1em;">This article is issued from <a class="external text" href="{{ webUrl }}{{ articleId }}">Wikipedia</a>. The text is available under the <a class="external text" href="http://creativecommons.org/licenses/by-sa/3.0/">Creative Commons Attribution/Share Alike</a>; additional terms may apply for the media files.</div>';
+var footerTemplateCode = '<div style="clear:both; background-image:linear-gradient(180deg, #E8E8E8, white); border-top: dashed 2px #AAAAAA; padding: 0.5em 0.5em 2em 0.5em; margin-top: 1em;">This article is issued from <a class="external text" href="{{ webUrl }}{{ articleId }}">{{ name }}</a>. The text is available under the <a class="external text" href="http://creativecommons.org/licenses/by-sa/3.0/">Creative Commons Attribution/Share Alike</a>; additional terms may apply for the media files.</div>';
 
 /************************************/
 /* CONSTANT VARIABLE SECTION ********/
@@ -84,7 +84,9 @@ var tryCount = {};
 var ltr = true;
 var autoAlign = ltr ? 'left' : 'right';
 var revAutoAlign = ltr ? 'right' : 'left';
-var subTitle = "From Wikipedia, the free encyclopedia";
+var subTitle = 'From Wikipedia, the free encyclopedia';
+var name = '';
+var lang = 'en';
 var articleIds = {};
 var namespaces = {};
 var redirectIds = {};
@@ -135,6 +137,7 @@ async.series([
     function( finished ) { getNamespaces( finished ) },
     function( finished ) { getMainPage( finished ) },
     function( finished ) { getSubTitle( finished ) },
+    function( finished ) { getSiteInfo( finished ) },
     function( finished ) { getArticleIds( finished ) }, 
     function( finished ) { getRedirectIds( finished ) },
     function( finished ) { saveArticles( finished ) },
@@ -235,7 +238,8 @@ function saveArticle( html, articleId ) {
 
 	if ( rel ) {
 	    /* Add 'external' class to external links */
-	    if ( rel.substring( 0, 10 ) === 'mw:ExtLink' || rel === 'mw:WikiLink/Interwiki' ) {
+	    if ( rel.substring( 0, 10 ) === 'mw:ExtLink' || 
+		 rel === 'mw:WikiLink/Interwiki' ) {
 		a.setAttribute( 'class', concatenateToAttribute( a.getAttribute( 'class'), 'external' ) );
 	    }
 
@@ -254,7 +258,7 @@ function saveArticle( html, articleId ) {
 	    }
 
 	    /* Remove internal links pointing to no mirrored articles */
-	    else if ( rel.substring( 0, 11 ) === 'mw:WikiLink' ) {
+	    else if ( rel == 'mw:WikiLink' ) {
 		var targetId = decodeURI( href.replace( /^\.\//, '' ) );
 		if ( isMirrored( targetId ) ) {
 		    a.setAttribute( 'href', getArticleUrl( targetId ) );
@@ -702,7 +706,7 @@ function getFooterNode( doc, articleId ) {
     var escapedArticleId = encodeURIComponent( articleId );
     var div = doc.createElement( 'div' );
     var tpl = swig.compile( footerTemplateCode );
-    div.innerHTML = tpl({ articleId: escapedArticleId, webUrl: webUrl });
+    div.innerHTML = tpl({ articleId: escapedArticleId, webUrl: webUrl, name: name });
     return div;
 }
 
@@ -983,14 +987,14 @@ function downloadFile( url, path, force ) {
 
 /* Internal path/url functions */
 function getMediaUrl( filename ) {
-    return '../../../../../' + getMediaBase( filename );
+    return '../../../../../' + getMediaBase( filename, true );
 }
 
-function getMediaPath( filename ) {
-    return rootPath + getMediaBase( filename );
+function getMediaPath( filename, escape ) {
+    return rootPath + getMediaBase( filename, escape );
 }
 
-function getMediaBase( filename ) {
+function getMediaBase( filename, escape ) {
     var parts = mediaRegex.exec( filename );
     var root = parts[2];
 
@@ -999,20 +1003,24 @@ function getMediaBase( filename ) {
 	process.exit( 1 );
     }
 
-    return mediaDirectory + '/' + ( root[0] || '_' ) + '/' + ( root[1] || '_' ) + '/' + 
-	( root[2] || '_' ) + '/' + ( root[3] || '_' ) + '/' + parts[2] + parts[3] + ( parts[4] || '' );
-; 
+    function e( string ) {
+	return ( string === undefined ? undefined :
+		 escape ? encodeURIComponent( string ) : string );
+    }
+
+    return mediaDirectory + '/' + ( e( root[0] ) || '_' ) + '/' + ( e( root[1] ) || '_' ) + '/' + 
+	( e( root[2] ) || '_' ) + '/' + ( e( root[3] ) || '_' ) + '/' + e( parts[2] + parts[3] + ( parts[4] || '' ) );
 }
 
 function getArticleUrl( articleId ) {
-    return '../../../../../' + getArticleBase( articleId );
+    return '../../../../../' + getArticleBase( articleId, true );
 }
 
-function getArticlePath( articleId ) {
-    return rootPath + getArticleBase( articleId );
+function getArticlePath( articleId, escape ) {
+    return rootPath + getArticleBase( articleId, escape );
 }
 
-function getArticleBase( articleId ) {
+function getArticleBase( articleId, escape ) {
     var filename = articleId.replace( /\//g, '_' );
     var dirBase = filename.replace( /\./g, '_');
     
@@ -1021,8 +1029,11 @@ function getArticleBase( articleId ) {
 	filename = filename.substr( 0, filename.length - 1 );
     }
 
-    return htmlDirectory + '/' + ( dirBase[0] || '_' ) + '/' + ( dirBase[1] || '_' ) + '/' + 
-	( dirBase[2] || '_' ) + '/' + ( dirBase[3] || '_' ) + '/' + filename + '.html';
+    return ( string === undefined ? undefined :
+	     escape ? encodeURIComponent( string ) : string );
+
+    return htmlDirectory + '/' + ( e( dirBase[0] ) || '_' ) + '/' + ( e( dirBase[1] ) || '_' ) + '/' + 
+	( e( dirBase[2] ) || '_' ) + '/' + ( e( dirBase[3] ) || '_' ) + '/' + e( filename ) + '.html';
 }
 
 function getSubTitle( finished ) {
@@ -1031,6 +1042,17 @@ function getSubTitle( finished ) {
 	var doc = domino.createDocument( html );
 	var subTitleNode = doc.getElementById( 'siteSub' );
 	subTitle = subTitleNode.innerHTML;
+	finished();
+    });
+}
+
+function getSiteInfo( finished ) {
+    console.info( 'Getting web site name...' );
+    var url = apiUrl + 'action=query&meta=siteinfo&format=json';
+    loadUrlSync( url, function( body ) {
+	var entries = JSON.parse( body )['query']['general'];
+	name = entries['sitename'];
+	lang = entries['lang'];
 	finished();
     });
 }
