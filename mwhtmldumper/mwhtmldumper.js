@@ -741,16 +741,18 @@ function loadUrlSync( url, callback ) {
 	try {
 	    var req = httpsync.get({ url : url });
 	    var res = req.end();
+	    var content = res.data.toString('utf8');
+
 	    if ( res.headers.location ) {
 		console.info( "Redirect detected, load " + decodeURI( res.headers.location ) );
 		return loadUrlSync( res.headers.location, callback );
 	    } else {
 		delete tryCount[ url ];
 		if ( callback ) {
-		    callback( res.data.toString('utf8') );
+		    callback( content );
 		    break;
 		} else {
-		    return res.data.toString('utf8');
+		    return content;
 		}
 	    }
 	} catch ( error ) {
@@ -1029,8 +1031,10 @@ function getArticleBase( articleId, escape ) {
 	filename = filename.substr( 0, filename.length - 1 );
     }
 
-    return ( string === undefined ? undefined :
-	     escape ? encodeURIComponent( string ) : string );
+    function e( string ) {
+	return ( string === undefined ? undefined :
+		 escape ? encodeURIComponent( string ) : string );
+    }
 
     return htmlDirectory + '/' + ( e( dirBase[0] ) || '_' ) + '/' + ( e( dirBase[1] ) || '_' ) + '/' + 
 	( e( dirBase[2] ) || '_' ) + '/' + ( e( dirBase[3] ) || '_' ) + '/' + e( filename ) + '.html';
@@ -1069,7 +1073,8 @@ function getMainPage( finished ) {
 	var mainPageRegex = /\"wgPageName\"\:\"(.*?)\"/;
 	var parts = mainPageRegex.exec( body );
 	if ( parts[ 1 ] ) {
-	    var html = redirectTemplate( { title:  parts[1].replace( /_/g, ' ' ), target : '../' + getArticleBase( parts[1] ) } );
+	    var html = redirectTemplate( { title:  parts[1].replace( /_/g, ' ' ), 
+					   target : '../' + getArticleBase( parts[1], true ) } );
 	    writeFile( html, rootPath + htmlDirectory + '/index.html' );
 	    articleIds[ parts[ 1 ] ] = undefined;
 	} else {
