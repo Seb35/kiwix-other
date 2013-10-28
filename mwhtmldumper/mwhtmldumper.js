@@ -30,10 +30,10 @@ var idBlackList = [ 'purgelink' ];
 var rootPath = 'static/';
 
 /* Parsoid URL */
-var parsoidUrl = 'http://parsoid.wmflabs.org/frwikisource/';
+var parsoidUrl = 'http://parsoid.wmflabs.org/fr/';
 
 /* Wikipedia/... URL */
-var hostUrl = 'http://fr.wikisource.org/';
+var hostUrl = 'http://fr.wikipedia.org/';
 
 /* Namespaces to mirror */
 var namespacesToMirror = [ '' ];
@@ -197,289 +197,303 @@ function saveArticles( finished ) {
 
 function saveArticle( html, articleId ) {
     console.info( 'Parsing HTML/RDF of ' + articleId + '...' );
-    var parsoidDoc = domino.createDocument( html );
+    
+    /* For some reasons this code crash randomly */
+    try {
+	var parsoidDoc = domino.createDocument( html );
 
-    /* Go through gallerybox */
-    var galleryboxes = parsoidDoc.getElementsByClassName( 'gallerybox' );
-    for ( var i = 0; i < galleryboxes.length ; i++ ) {
-	if ( ( ! galleryboxes[i].getElementsByClassName( 'thumb' ).length ) || ( ! withMedias ) ) {
-	    deleteNode( galleryboxes[i] );
+	/* Go through gallerybox */
+	var galleryboxes = parsoidDoc.getElementsByClassName( 'gallerybox' );
+	for ( var i = 0; i < galleryboxes.length ; i++ ) {
+	    if ( ( ! galleryboxes[i].getElementsByClassName( 'thumb' ).length ) || ( ! withMedias ) ) {
+		deleteNode( galleryboxes[i] );
+	    }
 	}
-    }
-
-    /* Remove useless DOM nodes without children */
-    var tagNames = [ 'li', 'span' ];
-    tagNames.map( function( tagName ) {
+	
+	/* Remove useless DOM nodes without children */
+	var tagNames = [ 'li', 'span' ];
+	tagNames.map( function( tagName ) {
 	    var nodes = parsoidDoc.getElementsByTagName( tagName );
 	    for ( var i = 0; i < nodes.length ; i++ ) {
 	        if ( ! nodes[i].innerHTML ) {
 		    deleteNode( nodes[i] );
 		}
 	    };
-    });
+	});
 
-    /* Remove useless input nodes */
-    var inputNodes = parsoidDoc.getElementsByTagName( 'input' );
-    for ( var i = 0; i < inputNodes.length ; i++ ) {
-	deleteNode( inputNodes[i] );
-    }
-
-    /* Go through all links (a tag) */
-    var as = parsoidDoc.getElementsByTagName( 'a' );
-    for ( var i = 0; i < as.length ; i++ ) {
-	var a = as[i];
-	var rel = a.getAttribute( 'rel' );
-	var href = a.getAttribute( 'href' );
-
-	if ( !href ) {
-	    deleteNode( a );
-	    continue;
+	/* Remove useless input nodes */
+	var inputNodes = parsoidDoc.getElementsByTagName( 'input' );
+	for ( var i = 0; i < inputNodes.length ; i++ ) {
+	    deleteNode( inputNodes[i] );
 	}
-
-	if ( rel ) {
-	    /* Add 'external' class to external links */
-	    if ( rel.substring( 0, 10 ) === 'mw:ExtLink' || 
-		 rel === 'mw:WikiLink/Interwiki' ) {
-		a.setAttribute( 'class', concatenateToAttribute( a.getAttribute( 'class'), 'external' ) );
+	
+	/* Go through all links (a tag) */
+	var as = parsoidDoc.getElementsByTagName( 'a' );
+	for ( var i = 0; i < as.length ; i++ ) {
+	    var a = as[i];
+	    var rel = a.getAttribute( 'rel' );
+	    var href = a.getAttribute( 'href' );
+	    
+	    if ( !href ) {
+		deleteNode( a );
+		continue;
 	    }
-
-	    /* Check if the link is "valid" */
-	    if ( ! href ) {
-		console.error( 'No href attribute in the following code, in article ' + articleId );
-		console.error( a.outerHTML );
-		process.exit(1);
-	    }
-
-	    /* Rewrite external links starting with // */
-	    if ( rel.substring( 0, 10 ) === 'mw:ExtLink' ) {
-		if ( href.substring( 0, 1 ) === '/' ) {
-		    a.setAttribute( 'href', getFullUrl( href ) );
+	    
+	    if ( rel ) {
+		/* Add 'external' class to external links */
+		if ( rel.substring( 0, 10 ) === 'mw:ExtLink' || 
+		     rel === 'mw:WikiLink/Interwiki' ) {
+		    a.setAttribute( 'class', concatenateToAttribute( a.getAttribute( 'class'), 'external' ) );
 		}
-	    }
-
-	    /* Remove internal links pointing to no mirrored articles */
-	    else if ( rel == 'mw:WikiLink' ) {
-		var targetId = decodeURI( href.replace( /^\.\//, '' ) );
-		if ( isMirrored( targetId ) ) {
-		    a.setAttribute( 'href', getArticleUrl( targetId ) );
-		} else {
-		    while ( a.firstChild ) {
-			a.parentNode.insertBefore( a.firstChild, a);
+		
+		/* Check if the link is "valid" */
+		if ( ! href ) {
+		    console.error( 'No href attribute in the following code, in article ' + articleId );
+		    console.error( a.outerHTML );
+		    process.exit(1);
+		}
+		
+		/* Rewrite external links starting with // */
+		if ( rel.substring( 0, 10 ) === 'mw:ExtLink' ) {
+		    if ( href.substring( 0, 1 ) === '/' ) {
+			a.setAttribute( 'href', getFullUrl( href ) );
 		    }
-		    a.parentNode.removeChild( a );
 		}
-	    }
-	} else {
-	    if ( href.indexOf( '/wiki/' ) != -1 ) {
-		var targetId = decodeURI( href.replace(/^\/wiki\//, '') );
-		if ( isMirrored( targetId ) ) {
-		    a.setAttribute( 'href', getArticleUrl( targetId ) );
-		} else {
-		    while ( a.firstChild ) {
-			a.parentNode.insertBefore( a.firstChild, a);
+		
+		/* Remove internal links pointing to no mirrored articles */
+		else if ( rel == 'mw:WikiLink' ) {
+		    var targetId = decodeURI( href.replace( /^\.\//, '' ) );
+		    if ( isMirrored( targetId ) ) {
+			a.setAttribute( 'href', getArticleUrl( targetId ) );
+		    } else {
+			while ( a.firstChild ) {
+			    a.parentNode.insertBefore( a.firstChild, a);
+			}
+			a.parentNode.removeChild( a );
 		    }
-		    a.parentNode.removeChild( a );
 		}
-	    }
-	}
-    }
-
-    /* Go through all reference calls */
-    var spans = parsoidDoc.getElementsByTagName( 'span' );
-    for ( var i = 0; i < spans.length ; i++ ) {
-	var span = spans[i];
-	var rel = span.getAttribute( 'rel' );
-	if ( rel === 'dc:references' ) {
-	    var sup = parsoidDoc.createElement( 'sup' );
-	    if ( span.innerHTML ) {
-		sup.id = span.id;
-		sup.innerHTML = span.innerHTML;
-		span.parentNode.replaceChild(sup, span);
 	    } else {
-		deleteNode( span );
+		if ( href.indexOf( '/wiki/' ) != -1 ) {
+		    var targetId = decodeURI( href.replace(/^\/wiki\//, '') );
+		    if ( isMirrored( targetId ) ) {
+			a.setAttribute( 'href', getArticleUrl( targetId ) );
+		    } else {
+			while ( a.firstChild ) {
+			    a.parentNode.insertBefore( a.firstChild, a);
+			}
+			a.parentNode.removeChild( a );
+		    }
+		}
 	    }
 	}
-    }
-
-    /* Rewrite thumbnails */
-    var figures = parsoidDoc.getElementsByTagName( 'figure' );
-    for ( var i = 0; i < figures.length ; i++ ) {
-	var figure = figures[i];
-
-	if ( withMedias ) {
-	    var figureClass = figure.getAttribute( 'class' ) || '';
-	    var figureTypeof = figure.getAttribute( 'typeof' );
-	    var image = figure.getElementsByTagName( 'img' )[0];
-	    var imageWidth = parseInt( image.getAttribute( 'width' ) );
-	    
-	    if ( figureTypeof.indexOf( 'mw:Image/Thumb' ) >= 0 ) {
-		var description = figure.getElementsByTagName( 'figcaption' )[0];
-		
-		var thumbDiv = parsoidDoc.createElement( 'div' );
-		thumbDiv.setAttribute
-		thumbDiv.setAttribute( 'class', 'thumb' );
-		if ( figureClass.search( 'mw-halign-right' ) >= 0 ) {
-		    thumbDiv.setAttribute( 'class', concatenateToAttribute( thumbDiv.getAttribute( 'class' ), 'tright' ) );
-		} else if ( figureClass.search( 'mw-halign-left' ) >= 0 ) {
-		    thumbDiv.setAttribute( 'class', concatenateToAttribute( thumbDiv.getAttribute( 'class' ), 'tleft' ) );
-		} else if ( figureClass.search( 'mw-halign-center' ) >= 0 ) {
-		    thumbDiv.setAttribute( 'class', concatenateToAttribute( thumbDiv.getAttribute( 'class' ), 'tnone center' ) );
+	
+	/* Go through all reference calls */
+	var spans = parsoidDoc.getElementsByTagName( 'span' );
+	for ( var i = 0; i < spans.length ; i++ ) {
+	    var span = spans[i];
+	    var rel = span.getAttribute( 'rel' );
+	    if ( rel === 'dc:references' ) {
+		var sup = parsoidDoc.createElement( 'sup' );
+		if ( span.innerHTML ) {
+		    sup.id = span.id;
+		    sup.innerHTML = span.innerHTML;
+		    span.parentNode.replaceChild(sup, span);
 		} else {
-		    thumbDiv.setAttribute( 'class', concatenateToAttribute( thumbDiv.getAttribute( 'class' ), 't' + revAutoAlign ) );
-		}
-		
-		var thumbinnerDiv = parsoidDoc.createElement( 'div' );
-		thumbinnerDiv.setAttribute( 'class', 'thumbinner' );
-		thumbinnerDiv.setAttribute( 'style', 'width:' + ( imageWidth + 2) + 'px' );
-		
-		var thumbcaptionDiv = parsoidDoc.createElement( 'div' );
-		thumbcaptionDiv.setAttribute( 'class', 'thumbcaption' );
-		thumbcaptionDiv.setAttribute( 'style', 'text-align: ' + autoAlign );
-		if ( description ) {
-		    thumbcaptionDiv.innerHTML = description.innerHTML
-		}
-		
-		thumbinnerDiv.appendChild( image );
-		thumbinnerDiv.appendChild( thumbcaptionDiv );
-		thumbDiv.appendChild( thumbinnerDiv );
-		
-		figure.parentNode.replaceChild(thumbDiv, figure);
-	    } else if ( figureTypeof.indexOf( 'mw:Image' ) >= 0 ) {
-		var div = parsoidDoc.createElement( 'div' );
-		if ( figureClass.search( 'mw-halign-right' ) >= 0 ) {
-		    div.setAttribute( 'class', concatenateToAttribute( div.getAttribute( 'class' ), 'floatright' ) );
-		} else if ( figureClass.search( 'mw-halign-left' ) >= 0 ) {
-		    div.setAttribute( 'class', concatenateToAttribute( div.getAttribute( 'class' ), 'floatleft' ) );
-		} else if ( figureClass.search( 'mw-halign-center' ) >= 0 ) {
-		    div.setAttribute( 'class', concatenateToAttribute( div.getAttribute( 'class' ), ' center' ) );
-		} else {
-		    div.setAttribute( 'class', concatenateToAttribute( div.getAttribute( 'class' ), 'float' + revAutoAlign ) );
-		}
-		div.appendChild( image );
-		figure.parentNode.replaceChild(div, figure);
-	    }
-	} else {
-	    deleteNode( figure );
-	}
-    }
-
-    /* Go through all images */
-    var imgs = parsoidDoc.getElementsByTagName( 'img' );
-    for ( var i = 0; i < imgs.length ; i++ ) {
-	var img = imgs[i];
-
-	if ( withMedias ) {
-	    var src = getFullUrl( img.getAttribute( 'src' ) );
-	    var filename = decodeURI( pathParser.basename( urlParser.parse( src ).pathname ) );
-	    
-	    /* Download image */
-	    downloadMedia( src, filename );
-	    
-	    /* Change image source attribute to point to the local image */
-	    img.setAttribute( 'src', getMediaUrl( filename ) );
-	    
-	    /* Remove useless 'resource' attribute */
-	    img.removeAttribute( 'resource' ); 
-	    
-	    /* Remove image link */
-	    var linkNode = img.parentNode;
-	    if ( linkNode.tagName === 'A') {
-		
-		/* Under certain condition it seems that this is possible
-		 * to have parentNode == undefined, in this case this
-		 * seems preferable to remove the whole link+content than
-		 * keeping a wrong link. See for example this url
-		 * http://parsoid.wmflabs.org/ko/%EC%9D%B4%ED%9C%98%EC%86%8C */
-		
-		if ( linkNode.parentNode ) {
-		    linkNode.parentNode.replaceChild( img, linkNode );
-		} else {
-		    deleteNode( img );
+		    deleteNode( span );
 		}
 	    }
-	} else {
-	    deleteNode( img );
 	}
-    }
-
-    /* Remove element with id in the blacklist */
-    idBlackList.map( function( id ) {
-	var node = parsoidDoc.getElementById( id );
-	if (node) {
-	    deleteNode( node );
-	}
-    });
-
-    /* Remove element with black listed CSS classes */
-    cssClassBlackList.map( function( classname ) {
-	var nodes = parsoidDoc.getElementsByClassName( classname );
-	for ( var i = 0; i < nodes.length ; i++ ) {
-	    deleteNode( nodes[i] );
-	}
-    });
-
-    /* Remove element with black listed CSS classes and no link */
-    cssClassBlackListIfNoLink.map( function( classname ) {
-	var nodes = parsoidDoc.getElementsByClassName( classname );
-	for ( var i = 0; i < nodes.length ; i++ ) {
-	    if ( nodes[i].getElementsByTagName( 'a' ).length === 0 ) {
-		deleteNode(nodes[i]);
+	
+	/* Rewrite thumbnails */
+	var figures = parsoidDoc.getElementsByTagName( 'figure' );
+	for ( var i = 0; i < figures.length ; i++ ) {
+	    var figure = figures[i];
+	    
+	    if ( withMedias ) {
+		var figureClass = figure.getAttribute( 'class' ) || '';
+		var figureTypeof = figure.getAttribute( 'typeof' );
+		var image = figure.getElementsByTagName( 'img' )[0];
+		var imageWidth = parseInt( image.getAttribute( 'width' ) );
+		
+		if ( figureTypeof.indexOf( 'mw:Image/Thumb' ) >= 0 ) {
+		    var description = figure.getElementsByTagName( 'figcaption' )[0];
+		    
+		    var thumbDiv = parsoidDoc.createElement( 'div' );
+		    thumbDiv.setAttribute
+		    thumbDiv.setAttribute( 'class', 'thumb' );
+		    if ( figureClass.search( 'mw-halign-right' ) >= 0 ) {
+			thumbDiv.setAttribute( 'class', concatenateToAttribute( thumbDiv.getAttribute( 'class' ), 'tright' ) );
+		    } else if ( figureClass.search( 'mw-halign-left' ) >= 0 ) {
+			thumbDiv.setAttribute( 'class', concatenateToAttribute( thumbDiv.getAttribute( 'class' ), 'tleft' ) );
+		    } else if ( figureClass.search( 'mw-halign-center' ) >= 0 ) {
+			thumbDiv.setAttribute( 'class', concatenateToAttribute( thumbDiv.getAttribute( 'class' ), 'tnone center' ) );
+		    } else {
+			thumbDiv.setAttribute( 'class', concatenateToAttribute( thumbDiv.getAttribute( 'class' ), 't' + revAutoAlign ) );
+		    }
+		    
+		    var thumbinnerDiv = parsoidDoc.createElement( 'div' );
+		    thumbinnerDiv.setAttribute( 'class', 'thumbinner' );
+		    thumbinnerDiv.setAttribute( 'style', 'width:' + ( imageWidth + 2) + 'px' );
+		    
+		    var thumbcaptionDiv = parsoidDoc.createElement( 'div' );
+		    thumbcaptionDiv.setAttribute( 'class', 'thumbcaption' );
+		    thumbcaptionDiv.setAttribute( 'style', 'text-align: ' + autoAlign );
+		    if ( description ) {
+			thumbcaptionDiv.innerHTML = description.innerHTML
+		    }
+		    
+		    thumbinnerDiv.appendChild( image );
+		    thumbinnerDiv.appendChild( thumbcaptionDiv );
+		    thumbDiv.appendChild( thumbinnerDiv );
+		    
+		    figure.parentNode.replaceChild(thumbDiv, figure);
+		} else if ( figureTypeof.indexOf( 'mw:Image' ) >= 0 ) {
+		    var div = parsoidDoc.createElement( 'div' );
+		    if ( figureClass.search( 'mw-halign-right' ) >= 0 ) {
+			div.setAttribute( 'class', concatenateToAttribute( div.getAttribute( 'class' ), 'floatright' ) );
+		    } else if ( figureClass.search( 'mw-halign-left' ) >= 0 ) {
+			div.setAttribute( 'class', concatenateToAttribute( div.getAttribute( 'class' ), 'floatleft' ) );
+		    } else if ( figureClass.search( 'mw-halign-center' ) >= 0 ) {
+			div.setAttribute( 'class', concatenateToAttribute( div.getAttribute( 'class' ), ' center' ) );
+		    } else {
+			div.setAttribute( 'class', concatenateToAttribute( div.getAttribute( 'class' ), 'float' + revAutoAlign ) );
+		    }
+		    div.appendChild( image );
+		    figure.parentNode.replaceChild(div, figure);
+		}
+	    } else {
+		deleteNode( figure );
 	    }
 	}
-    });
-
-    /* Create final document by merging template and parsoid documents */
-    var doc = domino.createDocument( templateHtml );
-    var contentNode = doc.getElementById( 'mw-content-text' );
-    contentNode.innerHTML = parsoidDoc.getElementsByTagName( 'body' )[0].innerHTML;
-    var contentTitleNode = doc.getElementById( 'firstHeading' );
-    contentTitleNode.innerHTML = articleId.replace( /_/g, ' ' );
-    var titleNode = doc.getElementsByTagName( 'title' )[0];
-    titleNode.innerHTML = articleId.replace( /_/g, ' ' );
-
-    /* Clean the DOM of all uncessary code */
-    var allNodes = doc.getElementsByTagName( '*' );
-    for ( var i = 0; i < allNodes.length ; i++ ) {                                                                                
-        var node = allNodes[i];
-	node.removeAttribute( 'data-parsoid' );
-	node.removeAttribute( 'typeof' );
-	node.removeAttribute( 'about' );
-	node.removeAttribute( 'data-mw' );
-
-	if ( node.getAttribute( 'rel' ) && node.getAttribute( 'rel' ).substr( 0, 3 ) === 'mw:' ) {
-	    node.removeAttribute( 'rel' );
+	
+	/* Go through all images */
+	var imgs = parsoidDoc.getElementsByTagName( 'img' );
+	for ( var i = 0; i < imgs.length ; i++ ) {
+	    var img = imgs[i];
+	    
+	    if ( withMedias ) {
+		console.log( img.outerHTML );
+		console.log( img.getAttribute( 'src')  );
+		var src = getFullUrl( img.getAttribute( 'src' ) );
+		var filename = decodeURI( pathParser.basename( urlParser.parse( src ).pathname ) );
+		
+		/* Download image */
+		downloadMedia( src, filename );
+		
+		/* Change image source attribute to point to the local image */
+		img.setAttribute( 'src', getMediaUrl( filename ) );
+		
+		/* Remove useless 'resource' attribute */
+		img.removeAttribute( 'resource' ); 
+		
+		/* Remove image link */
+		var linkNode = img.parentNode;
+		if ( linkNode.tagName === 'A') {
+		    
+		    /* Under certain condition it seems that this is possible
+		     * to have parentNode == undefined, in this case this
+		     * seems preferable to remove the whole link+content than
+		     * keeping a wrong link. See for example this url
+		     * http://parsoid.wmflabs.org/ko/%EC%9D%B4%ED%9C%98%EC%86%8C */
+		    
+		    if ( linkNode.parentNode ) {
+			linkNode.parentNode.replaceChild( img, linkNode );
+		    } else {
+			deleteNode( img );
+		    }
+		}
+	    } else {
+		deleteNode( img );
+	    }
 	}
-
-	/* Remove a few css calls */
-	cssClassCallsBlackList.map( function( classname )  {
-	    if ( node.getAttribute( 'class' ) ) {
-		node.setAttribute( 'class', node.getAttribute( 'class' ).replace( classname, '' ) );
+	
+	/* Remove element with id in the blacklist */
+	idBlackList.map( function( id ) {
+	    var node = parsoidDoc.getElementById( id );
+	    if (node) {
+		deleteNode( node );
 	    }
 	});
-    }
+	
+	/* Remove element with black listed CSS classes */
+	cssClassBlackList.map( function( classname ) {
+	    var nodes = parsoidDoc.getElementsByClassName( classname );
+	    for ( var i = 0; i < nodes.length ; i++ ) {
+		deleteNode( nodes[i] );
+	    }
+	});
+	
+	/* Remove element with black listed CSS classes and no link */
+	cssClassBlackListIfNoLink.map( function( classname ) {
+	    var nodes = parsoidDoc.getElementsByClassName( classname );
+	    for ( var i = 0; i < nodes.length ; i++ ) {
+		if ( nodes[i].getElementsByTagName( 'a' ).length === 0 ) {
+		    deleteNode(nodes[i]);
+		}
+	    }
+	});
+	
+	/* Create final document by merging template and parsoid documents */
+	var doc = domino.createDocument( templateHtml );
+	var contentNode = doc.getElementById( 'mw-content-text' );
+	contentNode.innerHTML = parsoidDoc.getElementsByTagName( 'body' )[0].innerHTML;
+	var contentTitleNode = doc.getElementById( 'firstHeading' );
+	contentTitleNode.innerHTML = articleId.replace( /_/g, ' ' );
+	var titleNode = doc.getElementsByTagName( 'title' )[0];
+	titleNode.innerHTML = articleId.replace( /_/g, ' ' );
+	
+	/* Clean the DOM of all uncessary code */
+	var allNodes = doc.getElementsByTagName( '*' );
+	for ( var i = 0; i < allNodes.length ; i++ ) {                                                                                
+            var node = allNodes[i];
+	    node.removeAttribute( 'data-parsoid' );
+	    node.removeAttribute( 'typeof' );
+	    node.removeAttribute( 'about' );
+	    node.removeAttribute( 'data-mw' );
+	    
+	    if ( node.getAttribute( 'rel' ) && node.getAttribute( 'rel' ).substr( 0, 3 ) === 'mw:' ) {
+		node.removeAttribute( 'rel' );
+	    }
+	    
+	    /* Remove a few css calls */
+	    cssClassCallsBlackList.map( function( classname )  {
+		if ( node.getAttribute( 'class' ) ) {
+		    node.setAttribute( 'class', node.getAttribute( 'class' ).replace( classname, '' ) );
+		}
+	    });
+	}
+	
+	/* Set sub-title */
+	doc.getElementById( 'ss' ).innerHTML = subTitle;
+	
+	/* Append footer node */
+	doc.getElementById( 'mw-content-text' ).appendChild( getFooterNode( doc, articleId ) );
+	
+	/* Minify HTML code */
+	var html;
+	try {
+	    html = htmlminifier.minify( doc.documentElement.outerHTML, {
+		removeComments: true,
+		removeCommentsFromCDATA: true,
+		collapseWhitespace: true,
+		collapseBooleanAttributes: true,
+		removeAttributeQuotes: true,
+		removeEmptyAttributes: true });
+	} catch ( error ) {
+	    html = doc.documentElement.outerHTML;
+	}
 
-    /* Set sub-title */
-    doc.getElementById( 'ss' ).innerHTML = subTitle;
-
-    /* Append footer node */
-    doc.getElementById( 'mw-content-text' ).appendChild( getFooterNode( doc, articleId ) );
-
-    /* Minify HTML code */
-    var html;
-    try {
-	html = htmlminifier.minify( doc.documentElement.outerHTML, {
-	    removeComments: true,
-	    removeCommentsFromCDATA: true,
-	    collapseWhitespace: true,
-	    collapseBooleanAttributes: true,
-	    removeAttributeQuotes: true,
-	    removeEmptyAttributes: true });
+	/* Write the static html file */
+	writeFile( html, getArticlePath( articleId ) );
     } catch ( error ) {
-	html = doc.documentElement.outerHTML;
+	console.error( 'Crash by parsing ' + articleId );
+	console.error( error );
+	console.error( 'Sleeping for 10 seconds' );
+	sleep.sleep( 10 );
+	loadUrlAsync( getArticleUrl( articleId ), function( html, articleId ) {
+	    saveArticle( html, articleId );
+	}, articleId);
     }
-
-    /* Write the static html file */
-    writeFile( html, getArticlePath( articleId ) );
 }
 
 function isMirrored( id ) {
@@ -552,13 +566,13 @@ function saveStylesheet() {
 	    var link = links[i];
 	    if (link.getAttribute('rel') === 'stylesheet') {
 		var url = link.getAttribute('href');
-		
+
 		/* Need a rewrite if url doesn't include protocol */
 		url = getFullUrl( url );
 		
 		console.info( 'Downloading CSS from ' + decodeURI( url ) );
-		loadUrlSync( url , function( body ) {
-		    
+		loadUrlSync( url, function( body ) {
+
 		    /* Downloading CSS dependencies */
 		    var match;
 		    var rewrittenCss = body;
@@ -580,8 +594,7 @@ function saveStylesheet() {
 			    downloadFile(url, rootPath + styleDirectory + '/' +filename );
 			}
 		    }
-		    
-		    fs.appendFile( stylePath, rewrittenCss, function (err) {} );
+		    fs.appendFileSync( stylePath, rewrittenCss );
 		});
 	    }
 	}
@@ -854,6 +867,7 @@ function loadUrlAsync( url, callback, var1, var2, var3 ) {
 
 function downloadMedia( url, filename ) {
     var parts = mediaRegex.exec( filename );
+    console.log( filename );
     var width = parts[1].replace( /px\-/g, '' ) || 9999999;
     var filenameBase = parts[2] + parts[3] + ( parts[4] || '' );
 
