@@ -146,6 +146,7 @@ class Article : public zim::writer::Article {
     virtual std::string getRedirectAid() const;
     virtual std::string getData() const;
     virtual void setData(std::string &value);
+    virtual bool shouldCompress() const;
 };
 
 class MetadataArticle : public Article {
@@ -233,6 +234,9 @@ Article::Article(const std::string& path)
       std::replace( title.begin(), title.end(), '_',  ' ');
     }
   }
+
+  /* url */
+  url = path;
 }
 
 std::string Article::getData() const
@@ -278,6 +282,11 @@ std::string Article::getMimeType() const
 std::string Article::getRedirectAid() const
 {
   return redirectAid;
+}
+
+bool Article::shouldCompress() const {
+  std::string mimeType = getMimeType();
+  return (mimeType.find("text") == 0 ? true : false);
 }
 
 /* ArticleSource class */
