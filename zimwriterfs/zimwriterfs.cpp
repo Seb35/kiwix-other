@@ -2,6 +2,7 @@
 #include <sys/stat.h>
 #include <assert.h>
 #include <getopt.h>
+#include <ctime>
 #include <stdio.h>
 #include <dirent.h>
 #include <unistd.h>
@@ -25,12 +26,20 @@
 #define MAX_QUEUE_SIZE 100
 
 bool verboseFlag = false;
+std::string language;
+std::string creator;
+std::string publisher;
+std::string title;
+std::string description;
+std::string welcome;
+std::string favicon; 
 std::string directoryPath;
 std::string zimPath;
 zim::writer::ZimCreator zimCreator;
 pthread_t directoryVisitor;
 pthread_mutex_t filenameQueueMutex;
 std::queue<std::string> filenameQueue;
+std::queue<std::string> metadataQueue;
 pthread_mutex_t directoryVisitorRunningMutex;
 bool isDirectoryVisitorRunningFlag = false;
 magic_t magic;
@@ -114,10 +123,11 @@ bool popFromFilenameQueue(std::string &filename) {
 }
 
 /* Article class */
-class Article : public zim::writer::Article
-{
+class Article : public zim::writer::Article {
+  protected:
     char ns;
     std::string aid;
+    std::string url;
     std::string title;
     std::string mimeType;
     std::string redirectAid;
@@ -134,6 +144,18 @@ class Article : public zim::writer::Article
     virtual bool isRedirect() const;
     virtual std::string getMimeType() const;
     virtual std::string getRedirectAid() const;
+    virtual std::string getData() const;
+    virtual void setData(std::string &value);
+};
+
+class MetadataArticle : public Article {
+  public:
+  MetadataArticle(std::string &id) {
+    aid = "/M/" + id;
+    url = id;
+    mimeType="text/plain";
+    ns = 'M';
+  }
 };
 
 Article::Article(const std::string& path)
@@ -213,6 +235,16 @@ Article::Article(const std::string& path)
   }
 }
 
+std::string Article::getData() const
+{
+  return data;
+}
+
+void Article::setData(std::string &value)
+{
+  data = value;
+}
+
 std::string Article::getAid() const
 {
   return aid;
@@ -225,7 +257,7 @@ char Article::getNamespace() const
 
 std::string Article::getUrl() const
 {
-  return title;
+  return url;
 }
 
 std::string Article::getTitle() const
@@ -261,26 +293,55 @@ ArticleSource::ArticleSource() {
 
 const zim::writer::Article* ArticleSource::getNextArticle() {
   std::cout << "getNexArticle..." << std::endl;
-  std::string filename;
+  std::string aid;
   Article *article = NULL;
   
-  if (popFromFilenameQueue(filename)) {
-    std::cout << "Packing " << filename << "..." << std::endl;
-    article = new Article(filename);
+  if (!metadataQueue.empty()) {
+    aid = metadataQueue.front();
+    metadataQueue.pop();
+    article = new MetadataArticle(aid);
+  } else if (popFromFilenameQueue(aid)) {
+    std::cout << "Packing " << aid << "..." << std::endl;
+    article = new Article(aid);
   }
 
   return article;
 }
 
 zim::Blob ArticleSource::getData(const std::string& aid) {
-  std::string data = getFileContent(aid);
-  unsigned int size = getFileSize(aid);
-  return zim::Blob(data.c_str(), size); 
+  if (aid.substr(0, 3) == "/M/") {
+    std::string value; 
+    if ( aid == "/M/Language") {
+      value = language;
+    } else if ( aid == "/M/Creator") {
+      value = creator;
+    } else if ( aid == "/M/Publisher") {
+      value = publisher;
+    } else if ( aid == "/M/Title") {
+      value = title;
+    } else if ( aid == "/M/Description") {
+      value = description;
+    } else if ( aid == "/M/Date") {
+      time_t t = time(0);
+      struct tm * now = localtime( & t );
+      std::stringstream stream;
+      stream << (now->tm_year + 1900) << '-' 
+	     << (now->tm_mon + 1) << '-'
+	     << now->tm_mday
+	     << std::endl;
+      value = stream.str();
+    }
+    return zim::Blob(value.c_str(), value.size());
+  } else {
+    std::string data = getFileContent(aid);
+    unsigned int size = getFileSize(aid);
+    return zim::Blob(data.c_str(), size);
+  }
 }
 
 /* Non ZIM related code */
 void usage() {
-  std::cout << "zimwriterfs DIRECTORY ZIM" << std::endl;
+  std::cout << "zimwriterfs --welcome=html/index.html --favicon=images/favicon.png --language=fra --title=foobar --description=mydescription --creator=Wikipedia --publisher=Kiwix DIRECTORY ZIM" << std::endl;
   std::cout << "\tDIRECTORY is the path of the directory containing the HTML pages you want to put in the ZIM file," << std::endl;
   std::cout << "\tZIM       is the path of the ZIM file you want to obtain." << std::endl;
 }
@@ -338,20 +399,49 @@ int main(int argc, char** argv) {
 
   /* Argument parsing */
   static struct option long_options[] = {
-    {"verbose", no_argument, 0, 'v'},
+    {"verbose", no_argument, 0, 'w'},
+    {"welcome", required_argument, 0, 'w'},
+    {"favicon", required_argument, 0, 'f'},
+    {"language", required_argument, 0, 'l'},
+    {"title", required_argument, 0, 't'},
+    {"description", required_argument, 0, 'd'},
+    {"creator", required_argument, 0, 'c'},
+    {"publisher", required_argument, 0, 'p'},
     {0, 0, 0, 0}
   };
   int option_index = 0;
   int c;
 
   do { 
-    c = getopt_long(argc, argv, "v", long_options, &option_index);
+    c = getopt_long(argc, argv, "vw:f:t:d:c:l:p:", long_options, &option_index);
     
     if (c != -1) {
       switch (c) {
       case 'v':
 	verboseFlag = true;
 	break;
+      case 'c':
+	creator = optarg;
+	break;
+      case 'd':
+	description = optarg;
+	break;
+      case 'f':
+	favicon = optarg;
+	break;
+      case 'l':
+	language = optarg;
+	break;
+      case 'p':
+	publisher = optarg;
+	break;
+      case 't':
+	title = optarg;
+	break;
+      case 'w':
+	welcome = optarg;
+	break;
+
       }
     }
   } while (c != -1);
@@ -368,7 +458,7 @@ int main(int argc, char** argv) {
     }
   }
   
-  if (directoryPath.empty() || zimPath.empty()) {
+  if (directoryPath.empty() || zimPath.empty() || creator.empty() || publisher.empty() || description.empty() || language.empty() || welcome.empty() || favicon.empty()) {
     std::cerr << "You have too few arguments!" << std::endl;
     usage();
     exit(1);
@@ -384,11 +474,20 @@ int main(int argc, char** argv) {
   pthread_create(&(directoryVisitor), NULL, visitDirectoryPath, (void*)NULL);
   pthread_detach(directoryVisitor);
 
+  /* Prepare metadata */
+  metadataQueue.push("Language");
+  metadataQueue.push("Publisher");
+  metadataQueue.push("Creator");
+  metadataQueue.push("Title");
+  metadataQueue.push("Description");
+  metadataQueue.push("Date");
+  metadataQueue.push("Welcome");
+  metadataQueue.push("Favicon");
+
   /* ZIM creation */
   try {
     zimCreator.create(zimPath, source);
-  } catch (const std::exception& e)
-    {
+  } catch (const std::exception& e) {
     std::cerr << e.what() << std::endl;
   }
 }
