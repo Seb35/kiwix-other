@@ -44,18 +44,22 @@ pthread_mutex_t directoryVisitorRunningMutex;
 bool isDirectoryVisitorRunningFlag = false;
 magic_t magic;
 
-std::string getFileContent(const std::string &path) {
-  std::FILE *fp = std::fopen(path.c_str(), "rb");
-  if (fp) {
-    std::string contents;
-    std::fseek(fp, 0, SEEK_END);
-    contents.resize(std::ftell(fp));
-    std::rewind(fp);
-    std::fread(&contents[0], 1, contents.size(), fp);
-    std::fclose(fp);
-    return(contents);
+char *getFileContent(const std::string &path) {
+  std::ifstream is(path.c_str(), std::ifstream::binary);
+  char * buffer = NULL;
+
+  if (is) {
+    is.seekg(0, is.end);
+    int length = is.tellg();
+    is.seekg(0, is.beg);
+    buffer = new char[length];
+    is.read(buffer,length);
+    if (!is)
+      throw "error: unable to read completly " + path;
+    is.close();
   }
-  throw(errno);
+  
+  return buffer;
 }
 
 unsigned int getFileSize(const std::string &path) {
@@ -161,7 +165,6 @@ class MetadataArticle : public Article {
 
 Article::Article(const std::string& path)
   : aid(path) {
-  std::string html;
 
   /* mime-type */
   mimeType = std::string(magic_file(magic, path.c_str()));
@@ -182,13 +185,14 @@ Article::Article(const std::string& path)
   } else {
     ns = 'I';
   }
-  
-  /* Search the content of the <title> tag in the HTML */
-  if (mimeType == "text/html") {
-    html = getFileContent(path);
-    GumboOutput* output = gumbo_parse(html.c_str());
+  ns = 'A';
+
+  if (mimeType.find("text/html") != std::string::npos) {
+    char *html = getFileContent(path);
+    GumboOutput* output = gumbo_parse(html);
     GumboNode* root = output->root;
 
+    /* Search the content of the <title> tag in the HTML */
     assert(root->type == GUMBO_NODE_ELEMENT);
     assert(root->v.element.children.length >= 2);
 
@@ -217,8 +221,6 @@ Article::Article(const std::string& path)
       }
     }
 
-    gumbo_destroy_output(&kGumboDefaultOptions, output);
-
     /* If no title, then compute one from the filename */
     if (title.empty()) {
       found = path.rfind("/");
@@ -233,10 +235,37 @@ Article::Article(const std::string& path)
       }
       std::replace( title.begin(), title.end(), '_',  ' ');
     }
+
+    /* Detect if this is a redirection */
+    for (int i = 0; i < head_children->length; ++i) {
+      GumboNode* child = (GumboNode*)(head_children->data[i]);
+      if (child->type == GUMBO_NODE_ELEMENT &&
+	  child->v.element.tag == GUMBO_TAG_META) {
+	GumboAttribute* attribute;
+	if (attribute = gumbo_get_attribute(&child->v.element.attributes, "http-equiv")) {
+	  if (!strcmp(attribute->value, "refresh")) {
+	    if (attribute = gumbo_get_attribute(&child->v.element.attributes, "content")) {
+	      std::string targetUrl = attribute->value;
+	      found = targetUrl.find("URL=") != std::string::npos ? targetUrl.find("URL=") : targetUrl.find("url=");
+	      if (found!=std::string::npos) {
+		targetUrl = targetUrl.substr(found);
+		redirectAid = targetUrl;
+	      } else {
+		throw "Unable to find the target url in redirection file " + path;
+	      }
+	    }
+	  }
+	}
+      }
+    }
+
+    gumbo_destroy_output(&kGumboDefaultOptions, output);
+    delete(html);
   }
 
   /* url */
-  url = path;
+  url = path.substr(directoryPath.size()+1);
+  std::cout << url << std::endl;
 }
 
 std::string Article::getData() const
@@ -342,9 +371,9 @@ zim::Blob ArticleSource::getData(const std::string& aid) {
     }
     return zim::Blob(value.c_str(), value.size());
   } else {
-    std::string data = getFileContent(aid);
+    char *data = getFileContent(aid);
     unsigned int size = getFileSize(aid);
-    return zim::Blob(data.c_str(), size);
+    return zim::Blob(data, size);
   }
 }
 
