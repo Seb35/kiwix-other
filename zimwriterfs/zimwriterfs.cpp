@@ -1,3 +1,5 @@
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <assert.h>
 #include <getopt.h>
 #include <stdio.h>
@@ -33,7 +35,7 @@ pthread_mutex_t directoryVisitorRunningMutex;
 bool isDirectoryVisitorRunningFlag = false;
 magic_t magic;
 
-std::string getFileContents(const std::string &path) {
+std::string getFileContent(const std::string &path) {
   std::FILE *fp = std::fopen(path.c_str(), "rb");
   if (fp) {
     std::string contents;
@@ -46,6 +48,12 @@ std::string getFileContents(const std::string &path) {
   }
   throw(errno);
 }
+
+unsigned int getFileSize(const std::string &path) {
+  struct stat filestatus;
+  stat(path.c_str(), &filestatus);
+  return filestatus.st_size;
+}    
 
 void directoryVisitorRunning(bool value) {
   pthread_mutex_lock(&directoryVisitorRunningMutex);
@@ -113,6 +121,7 @@ class Article : public zim::writer::Article
     std::string title;
     std::string mimeType;
     std::string redirectAid;
+    std::string data;
 
   public:
     Article() { }
@@ -129,17 +138,31 @@ class Article : public zim::writer::Article
 
 Article::Article(const std::string& path)
   : aid(path) {
+  std::string html;
 
   /* mime-type */
   mimeType = std::string(magic_file(magic, path.c_str()));
   std::size_t found = mimeType.find(";");
   if (found != std::string::npos) {
-    mimeType = mimeType.substr(0, found);
+    /* Don't remove the semi-colon, otherwise ZIM file is corrupt,
+       strange */
+    mimeType = mimeType.substr(0, found+1);
+  }
+
+  /* namespace */
+  if (mimeType.find("text") == 0) {
+    if (mimeType.find("text/html") == 0) {
+      ns = 'A';
+    } else {
+      ns = '-';
+    }
+  } else {
+    ns = 'I';
   }
   
   /* Search the content of the <title> tag in the HTML */
   if (mimeType == "text/html") {
-    std::string html = getFileContents(path);
+    html = getFileContent(path);
     GumboOutput* output = gumbo_parse(html.c_str());
     GumboNode* root = output->root;
 
@@ -250,8 +273,9 @@ const zim::writer::Article* ArticleSource::getNextArticle() {
 }
 
 zim::Blob ArticleSource::getData(const std::string& aid) {
-  zim::Blob blob;
-  return blob;
+  std::string data = getFileContent(aid);
+  unsigned int size = getFileSize(aid);
+  return zim::Blob(data.c_str(), size); 
 }
 
 /* Non ZIM related code */
