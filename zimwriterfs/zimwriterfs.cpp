@@ -1,16 +1,24 @@
+#include <assert.h>
 #include <getopt.h>
 #include <stdio.h>
 #include <dirent.h>
 #include <unistd.h>
 #include <pthread.h>
 
+#include <fstream>
 #include <iostream>
 #include <sstream>
 #include <vector>
 #include <queue>
+#include <cstdio>
+#include <cerrno>
+
+#include <magic.h>
 
 #include <zim/writer/zimcreator.h>
 #include <zim/blob.h>
+
+#include <gumbo.h>
 
 #define MAX_QUEUE_SIZE 100
 
@@ -23,6 +31,21 @@ pthread_mutex_t filenameQueueMutex;
 std::queue<std::string> filenameQueue;
 pthread_mutex_t directoryVisitorRunningMutex;
 bool isDirectoryVisitorRunningFlag = false;
+magic_t magic;
+
+std::string getFileContents(const std::string &path) {
+  std::FILE *fp = std::fopen(path.c_str(), "rb");
+  if (fp) {
+    std::string contents;
+    std::fseek(fp, 0, SEEK_END);
+    contents.resize(std::ftell(fp));
+    std::rewind(fp);
+    std::fread(&contents[0], 1, contents.size(), fp);
+    std::fclose(fp);
+    return(contents);
+  }
+  throw(errno);
+}
 
 void directoryVisitorRunning(bool value) {
   pthread_mutex_lock(&directoryVisitorRunningMutex);
@@ -85,32 +108,96 @@ bool popFromFilenameQueue(std::string &filename) {
 /* Article class */
 class Article : public zim::writer::Article
 {
-    friend class WikiSource;
-
     char ns;
     std::string aid;
     std::string title;
+    std::string mimeType;
     std::string redirectAid;
 
   public:
+    Article() { }
+    explicit Article(const std::string& id);
+  
     virtual std::string getAid() const;
     virtual char getNamespace() const;
     virtual std::string getUrl() const;
     virtual std::string getTitle() const;
-    virtual zim::size_type getVersion() const;
     virtual bool isRedirect() const;
     virtual std::string getMimeType() const;
     virtual std::string getRedirectAid() const;
 };
 
+Article::Article(const std::string& path)
+  : aid(path) {
+
+  /* mime-type */
+  mimeType = std::string(magic_file(magic, path.c_str()));
+  std::size_t found = mimeType.find(";");
+  if (found != std::string::npos) {
+    mimeType = mimeType.substr(0, found);
+  }
+  
+  /* Search the content of the <title> tag in the HTML */
+  if (mimeType == "text/html") {
+    std::string html = getFileContents(path);
+    GumboOutput* output = gumbo_parse(html.c_str());
+    GumboNode* root = output->root;
+
+    assert(root->type == GUMBO_NODE_ELEMENT);
+    assert(root->v.element.children.length >= 2);
+
+    const GumboVector* root_children = &root->v.element.children;
+    GumboNode* head = NULL;
+    for (int i = 0; i < root_children->length; ++i) {
+      GumboNode* child = (GumboNode*)(root_children->data[i]);
+      if (child->type == GUMBO_NODE_ELEMENT &&
+	  child->v.element.tag == GUMBO_TAG_HEAD) {
+	head = child;
+	break;
+      }
+    }
+    assert(head != NULL);
+
+    GumboVector* head_children = &head->v.element.children;
+    for (int i = 0; i < head_children->length; ++i) {
+      GumboNode* child = (GumboNode*)(head_children->data[i]);
+      if (child->type == GUMBO_NODE_ELEMENT &&
+	  child->v.element.tag == GUMBO_TAG_TITLE) {
+	if (child->v.element.children.length == 1) {
+	  GumboNode* title_text = (GumboNode*)(child->v.element.children.data[0]);
+	  assert(title_text->type == GUMBO_NODE_TEXT);
+	  title = title_text->v.text.text;
+	}
+      }
+    }
+
+    gumbo_destroy_output(&kGumboDefaultOptions, output);
+
+    /* If no title, then compute one from the filename */
+    if (title.empty()) {
+      found = path.rfind("/");
+      if (found!=std::string::npos) {
+	title = path.substr(found+1);
+	found = title.rfind(".");
+	if (found!=std::string::npos) {
+	  title = title.substr(0, found);
+	}
+      } else {
+	title = path;
+      }
+      std::replace( title.begin(), title.end(), '_',  ' ');
+    }
+  }
+}
+
 std::string Article::getAid() const
 {
-  return title;
+  return aid;
 }
 
 char Article::getNamespace() const
 {
-  return 'A';
+  return ns;
 }
 
 std::string Article::getUrl() const
@@ -123,11 +210,6 @@ std::string Article::getTitle() const
   return title;
 }
 
-zim::size_type Article::getVersion() const
-{
-  return 0;
-}
-
 bool Article::isRedirect() const
 {
   return !redirectAid.empty();
@@ -135,7 +217,7 @@ bool Article::isRedirect() const
 
 std::string Article::getMimeType() const
 {
-  return "text/html";
+  return mimeType;
 }
 
 std::string Article::getRedirectAid() const
@@ -161,8 +243,7 @@ const zim::writer::Article* ArticleSource::getNextArticle() {
   
   if (popFromFilenameQueue(filename)) {
     std::cout << "Packing " << filename << "..." << std::endl;
-    article = new Article();
-    usleep(1000000);
+    article = new Article(filename);
   }
 
   return article;
@@ -195,7 +276,7 @@ void *visitDirectory(const std::string &path) {
   struct dirent *entry;
   while (entry = readdir(directory)) {
     std::string entryName = entry->d_name;
-    std::string fullEntryName = path + "/" + entryName;
+    std::string fullEntryName = path + '/' + entryName;
 
     switch (entry->d_type) {
     case DT_REG:
@@ -225,6 +306,9 @@ int main(int argc, char** argv) {
   ArticleSource source;
 
   /* Init */
+  magic = magic_open(MAGIC_MIME);
+  magic_load(magic, NULL);
+
   pthread_mutex_init(&filenameQueueMutex, NULL);
   pthread_mutex_init(&directoryVisitorRunningMutex, NULL);
 
@@ -264,6 +348,11 @@ int main(int argc, char** argv) {
     std::cerr << "You have too few arguments!" << std::endl;
     usage();
     exit(1);
+  }
+
+  /* Check arguments */
+  if (directoryPath[directoryPath.length()-1] == '/') {
+    directoryPath = directoryPath.substr(directoryPath.length()-2);
   }
 
   /* Directory visitor */

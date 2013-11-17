@@ -33,6 +33,10 @@ AC_LANG(C++)
 # Check the existence of stat64 (to handle file >2GB) in the libc
 AC_CHECK_FUNCS([stat64])
 
+# cxxflags
+CXXFLAGS=" -Igumbo "
+CFLAGS=" -std=gnu99 -std=c99"
+
 # liblzma
 LIBLZMA_CFLAGS=""
 LIBLZMA_LDFLAGS=" -llzma"
@@ -48,6 +52,7 @@ AC_DEFINE(ENABLE_LZMA, [1], [defined if lzma compression is enabled])
 
 # export variables
 AC_SUBST(CXXFLAGS)
+AC_SUBST(CFLAGS)
 AC_SUBST(LIBLZMA_CFLAGS)
 AC_SUBST(LIBLZMA_LDFLAGS)
 AC_SUBST(LIBZIM_CFLAGS)
