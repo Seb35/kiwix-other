@@ -491,7 +491,7 @@ std::string ArticleSource::getMainPage() {
 const zim::writer::Article* ArticleSource::getNextArticle() {
   std::string aid;
   Article *article = NULL;
-  
+
   if (!metadataQueue.empty()) {
     aid = metadataQueue.front();
     metadataQueue.pop();
@@ -500,10 +500,13 @@ const zim::writer::Article* ArticleSource::getNextArticle() {
     article = new Article(aid);
   }
 
+  std::cout << "Creating entry for " << aid << std::endl;  
+
   return article;
 }
 
 zim::Blob ArticleSource::getData(const std::string& aid) {
+  std::cout << "Packing data for " << aid << std::endl;
   if (aid.substr(0, 3) == "/M/") {
     std::string value; 
     if ( aid == "/M/Language") {
@@ -547,6 +550,7 @@ void usage() {
 }
 
 void *visitDirectory(const std::string &path) {
+  std::cout << "Visiting directory " << path << std::endl;
   pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
   DIR *directory;
 
@@ -662,7 +666,7 @@ int main(int argc, char** argv) {
 
   /* Check arguments */
   if (directoryPath[directoryPath.length()-1] == '/') {
-    directoryPath = directoryPath.substr(directoryPath.length()-2);
+    directoryPath = directoryPath.substr(0, directoryPath.length()-1);
   }
 
   /* Directory visitor */
