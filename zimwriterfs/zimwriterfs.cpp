@@ -51,9 +51,9 @@ pthread_mutex_t directoryVisitorRunningMutex;
 bool isDirectoryVisitorRunningFlag = false;
 magic_t magic;
 std::map<std::string, std::string> urls;
-std::map<std::string, std::string> dataCache;
+std::map<std::string, const char*> dataCache;
 
-char *getFileContent(const std::string &path) {
+char *getFileContent(const std::string &path, bool trailingNull) {
   std::ifstream is(path.c_str(), std::ifstream::binary);
   char * buffer = NULL;
 
@@ -61,13 +61,20 @@ char *getFileContent(const std::string &path) {
     is.seekg(0, is.end);
     int length = is.tellg();
     is.seekg(0, is.beg);
-    buffer = new char[length];
+
+    if (trailingNull) {
+      buffer = new char[length+1];
+      buffer[length] = 0;
+    } else {
+      buffer = new char[length];
+    }
+
     is.read(buffer,length);
     if (!is)
       throw "error: unable to read completly " + path;
     is.close();
   }
-  
+
   return buffer;
 }
 
@@ -304,7 +311,7 @@ Article::Article(const std::string& path)
   ns = 'A';
 
   if (mimeType.find("text/html") != std::string::npos) {
-    char *html = getFileContent(path);
+    char *html = getFileContent(path, true);
     std::string aidDirectory = removeLastPathElement(aid, false, false);
     std::string htmlStr = html;
     GumboOutput* output = gumbo_parse(html);
@@ -387,8 +394,7 @@ Article::Article(const std::string& path)
 	std::string newUrl = computeNewUrl(filename);
 	replaceStringInPlace(htmlStr, it->first, newUrl);
       }
-
-      dataCache[aid] = htmlStr;
+      dataCache[aid] = strdup(htmlStr.c_str());
     }
 
     gumbo_destroy_output(&kGumboDefaultOptions, output);
@@ -495,12 +501,12 @@ zim::Blob ArticleSource::getData(const std::string& aid) {
     }
     return zim::Blob(value.c_str(), value.size());
   } else if (dataCache.find(aid) != dataCache.end()) {
-    const char *data = strdup(dataCache[aid].c_str());
-    unsigned int size = dataCache[aid].size();
+    const char *data = dataCache[aid];
+    unsigned int size = strlen(data);
     dataCache.erase(aid);
     return zim::Blob(data, size);
   } else {
-    const char *data = getFileContent(aid);
+    const char *data = getFileContent(aid, false);
     unsigned int size = getFileSize(aid);
     return zim::Blob(data, size);
   }
