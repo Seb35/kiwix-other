@@ -445,9 +445,14 @@ class ArticleSource : public zim::writer::ArticleSource {
     explicit ArticleSource();
     virtual const zim::writer::Article* getNextArticle();
     virtual zim::Blob getData(const std::string& aid);
+    virtual std::string getMainPage();
 };
 
 ArticleSource::ArticleSource() {
+}
+
+std::string ArticleSource::getMainPage() {
+  return directoryPath + "/" + welcome;
 }
 
 const zim::writer::Article* ArticleSource::getNextArticle() {
@@ -478,7 +483,6 @@ zim::Blob ArticleSource::getData(const std::string& aid) {
       value = title;
     } else if (aid == "/M/Description") {
       value = description;
-    } else if (aid == "/M/Welcome") {
     } else if ( aid == "/M/Date") {
       time_t t = time(0);
       struct tm * now = localtime( & t );
@@ -640,7 +644,6 @@ int main(int argc, char** argv) {
   metadataQueue.push("Title");
   metadataQueue.push("Description");
   metadataQueue.push("Date");
-  metadataQueue.push("Welcome");
   metadataQueue.push("Favicon");
 
   /* ZIM creation */
