@@ -224,10 +224,18 @@ class Article : public zim::writer::Article {
 class MetadataArticle : public Article {
   public:
   MetadataArticle(std::string &id) {
-    aid = "/M/" + id;
-    url = id;
-    mimeType="text/plain";
-    ns = 'M';
+    if (id == "Favicon") {
+      aid = "/-/" + id;
+      mimeType="image/png";
+      redirectAid = directoryPath + "/" + favicon;
+      ns = '-';
+      url = "favicon";
+    } else {
+      aid = "/M/" + id;
+      mimeType="text/plain";
+      ns = 'M';
+      url = id;
+    }
   }
 };
 
@@ -462,14 +470,15 @@ zim::Blob ArticleSource::getData(const std::string& aid) {
     std::string value; 
     if ( aid == "/M/Language") {
       value = language;
-    } else if ( aid == "/M/Creator") {
+    } else if (aid == "/M/Creator") {
       value = creator;
-    } else if ( aid == "/M/Publisher") {
+    } else if (aid == "/M/Publisher") {
       value = publisher;
-    } else if ( aid == "/M/Title") {
+    } else if (aid == "/M/Title") {
       value = title;
-    } else if ( aid == "/M/Description") {
+    } else if (aid == "/M/Description") {
       value = description;
+    } else if (aid == "/M/Welcome") {
     } else if ( aid == "/M/Date") {
       time_t t = time(0);
       struct tm * now = localtime( & t );
