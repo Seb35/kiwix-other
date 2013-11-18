@@ -13,6 +13,7 @@
 #include <sstream>
 #include <vector>
 #include <queue>
+#include <map>
 #include <cstdio>
 #include <cerrno>
 
@@ -49,6 +50,8 @@ std::queue<std::string> metadataQueue;
 pthread_mutex_t directoryVisitorRunningMutex;
 bool isDirectoryVisitorRunningFlag = false;
 magic_t magic;
+std::map<std::string, std::string> urls;
+std::map<std::string, std::string> dataCache;
 
 char *getFileContent(const std::string &path) {
   std::ifstream is(path.c_str(), std::ifstream::binary);
@@ -103,7 +106,7 @@ std::string computeAbsolutePath(const std::string path, const std::string relati
 
     absolutePath = std::string(path) + SEPARATOR;
   } else {
-    absolutePath = path.substr(path.length() - 1, 1) == SEPARATOR ? path : path + SEPARATOR;
+    absolutePath = path.substr(path.length()-1, 1) == SEPARATOR ? path : path + SEPARATOR;
   }
 
 #if _WIN32
@@ -128,6 +131,11 @@ std::string computeAbsolutePath(const std::string path, const std::string relati
   }
 
   return absolutePath;
+}
+
+std::string rewriteUrl(std::string) {
+  std::string result;
+  return result;
 }
 
 void directoryVisitorRunning(bool value) {
@@ -210,8 +218,6 @@ class Article : public zim::writer::Article {
     virtual bool isRedirect() const;
     virtual std::string getMimeType() const;
     virtual std::string getRedirectAid() const;
-    virtual std::string getData() const;
-    virtual void setData(std::string &value);
     virtual bool shouldCompress() const;
 };
 
@@ -224,6 +230,46 @@ class MetadataArticle : public Article {
     ns = 'M';
   }
 };
+
+static bool isLocalUrl(const std::string url) {
+  return url.find("://") == std::string::npos;
+}
+
+static void getLinks(GumboNode* node, std::map<std::string, bool> &links) {
+  if (node->type != GUMBO_NODE_ELEMENT) {
+    return;
+  }
+
+  GumboAttribute* attribute;
+  if (attribute = gumbo_get_attribute(&node->v.element.attributes, "href")) {
+  } else if (attribute = gumbo_get_attribute(&node->v.element.attributes, "src")) {
+  }
+  if (attribute != NULL && isLocalUrl(attribute->value)) {
+    links[attribute->value] = true;
+  }
+
+  GumboVector* children = &node->v.element.children;
+  for (int i = 0; i < children->length; ++i) {
+    getLinks(static_cast<GumboNode*>(children->data[i]), links);
+  }
+}
+
+static void replaceStringInPlace(std::string& subject, const std::string& search,
+				 const std::string& replace) {
+  size_t pos = 0;
+  while ((pos = subject.find(search, pos)) != std::string::npos) {
+    subject.replace(pos, search.length(), replace);
+    pos += replace.length();
+  }
+}
+
+static std::string computeNewUrl(const std::string &filename) {
+  if ( urls.find(filename) == urls.end() ) {
+    std::string url = "/A/" + filename.substr(directoryPath.size()+1);
+    urls[filename] = url;
+  }
+  return urls[filename];
+}
 
 Article::Article(const std::string& path)
   : aid(path) {
@@ -251,6 +297,8 @@ Article::Article(const std::string& path)
 
   if (mimeType.find("text/html") != std::string::npos) {
     char *html = getFileContent(path);
+    std::string aidDirectory = removeLastPathElement(aid, false, false);
+    std::string htmlStr = html;
     GumboOutput* output = gumbo_parse(html);
     GumboNode* root = output->root;
 
@@ -310,8 +358,8 @@ Article::Article(const std::string& path)
 	      std::string targetUrl = attribute->value;
 	      found = targetUrl.find("URL=") != std::string::npos ? targetUrl.find("URL=") : targetUrl.find("url=");
 	      if (found!=std::string::npos) {
-		targetUrl = computeAbsolutePath(aid, targetUrl.substr(found+4));
-		redirectAid = targetUrl;
+		targetUrl = computeAbsolutePath(aidDirectory, targetUrl.substr(found+4));
+		redirectAid = rewriteUrl(targetUrl);
 	      } else {
 		throw "Unable to find the target url in redirection file " + path;
 	      }
@@ -321,23 +369,26 @@ Article::Article(const std::string& path)
       }
     }
 
+    /* Rewrite links (src|href|...) attributes */
+    if (redirectAid.empty()) {
+      std::map<std::string, bool> links;
+      getLinks(root, links);
+      std::map<std::string, bool>::iterator it;
+      for(it = links.begin(); it != links.end(); it++) {
+	std::string filename = computeAbsolutePath(aidDirectory, it->first);
+	std::string newUrl = computeNewUrl(filename);
+	replaceStringInPlace(htmlStr, it->first, newUrl);
+      }
+
+      dataCache[aid] = htmlStr;
+    }
+
     gumbo_destroy_output(&kGumboDefaultOptions, output);
     delete(html);
   }
 
   /* url */
   url = path.substr(directoryPath.size()+1);
-  std::cout << url << std::endl;
-}
-
-std::string Article::getData() const
-{
-  return data;
-}
-
-void Article::setData(std::string &value)
-{
-  data = value;
 }
 
 std::string Article::getAid() const
@@ -392,7 +443,6 @@ ArticleSource::ArticleSource() {
 }
 
 const zim::writer::Article* ArticleSource::getNextArticle() {
-  std::cout << "getNexArticle..." << std::endl;
   std::string aid;
   Article *article = NULL;
   
@@ -401,7 +451,6 @@ const zim::writer::Article* ArticleSource::getNextArticle() {
     metadataQueue.pop();
     article = new MetadataArticle(aid);
   } else if (popFromFilenameQueue(aid)) {
-    std::cout << "Packing " << aid << "..." << std::endl;
     article = new Article(aid);
   }
 
@@ -432,8 +481,13 @@ zim::Blob ArticleSource::getData(const std::string& aid) {
       value = stream.str();
     }
     return zim::Blob(value.c_str(), value.size());
+  } else if (dataCache.find(aid) != dataCache.end()) {
+    const char *data = strdup(dataCache[aid].c_str());
+    unsigned int size = dataCache[aid].size();
+    dataCache.erase(aid);
+    return zim::Blob(data, size);
   } else {
-    char *data = getFileContent(aid);
+    const char *data = getFileContent(aid);
     unsigned int size = getFileSize(aid);
     return zim::Blob(data, size);
   }
@@ -465,12 +519,10 @@ void *visitDirectory(const std::string &path) {
 
     switch (entry->d_type) {
     case DT_REG:
-      std::cout << "Pushing '" << fullEntryName << "'" <<std::endl;
       pushToFilenameQueue(fullEntryName);
       break;
     case DT_DIR:
       if (entryName != "." && entryName != "..") {
-	std::cout << "Visiting '" << fullEntryName << "'" <<std::endl;
 	visitDirectory(fullEntryName);
       }
       break;
