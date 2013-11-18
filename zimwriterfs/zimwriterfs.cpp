@@ -84,6 +84,23 @@ unsigned int getFileSize(const std::string &path) {
   return filestatus.st_size;
 }    
 
+std::string decodeUrl(const std::string &SRC) {
+  std::string ret;
+  char ch;
+  unsigned int i, ii;
+  for (i=0; i<SRC.length(); i++) {
+    if (int(SRC[i])==37) {
+      sscanf(SRC.substr(i+1,2).c_str(), "%x", &ii);
+      ch=static_cast<char>(ii);
+      ret+=ch;
+      i=i+2;
+    } else {
+      ret+=SRC[i];
+    }
+  }
+  return (ret);
+}
+
 std::string removeLastPathElement(const std::string path, const bool removePreSeparator, const bool removePostSeparator) {
   std::string newPath = path;
   size_t offset = newPath.find_last_of(SEPARATOR);
@@ -250,6 +267,33 @@ static bool isLocalUrl(const std::string url) {
   return url.find("://") == std::string::npos;
 }
 
+static std::string extractRedirectUrlFromHtml(const GumboVector* head_children) {
+  std::string url;
+  
+  for (int i = 0; i < head_children->length; ++i) {
+    GumboNode* child = (GumboNode*)(head_children->data[i]);
+    if (child->type == GUMBO_NODE_ELEMENT &&
+	child->v.element.tag == GUMBO_TAG_META) {
+      GumboAttribute* attribute;
+      if (attribute = gumbo_get_attribute(&child->v.element.attributes, "http-equiv")) {
+	if (!strcmp(attribute->value, "refresh")) {
+	  if (attribute = gumbo_get_attribute(&child->v.element.attributes, "content")) {
+	    std::string targetUrl = attribute->value;
+	    std::size_t found = targetUrl.find("URL=") != std::string::npos ? targetUrl.find("URL=") : targetUrl.find("url=");
+	    if (found!=std::string::npos) {
+	      url = targetUrl.substr(found+4);
+	    } else {
+	      throw "Unable to find the target url from the HTML DOM";
+	    }
+	  }
+	}
+      }
+    }
+  }
+  
+  return url;
+}
+
 static void getLinks(GumboNode* node, std::map<std::string, bool> &links) {
   if (node->type != GUMBO_NODE_ELEMENT) {
     return;
@@ -361,27 +405,10 @@ Article::Article(const std::string& path)
       std::replace( title.begin(), title.end(), '_',  ' ');
     }
 
-    /* Detect if this is a redirection */
-    for (int i = 0; i < head_children->length; ++i) {
-      GumboNode* child = (GumboNode*)(head_children->data[i]);
-      if (child->type == GUMBO_NODE_ELEMENT &&
-	  child->v.element.tag == GUMBO_TAG_META) {
-	GumboAttribute* attribute;
-	if (attribute = gumbo_get_attribute(&child->v.element.attributes, "http-equiv")) {
-	  if (!strcmp(attribute->value, "refresh")) {
-	    if (attribute = gumbo_get_attribute(&child->v.element.attributes, "content")) {
-	      std::string targetUrl = attribute->value;
-	      found = targetUrl.find("URL=") != std::string::npos ? targetUrl.find("URL=") : targetUrl.find("url=");
-	      if (found!=std::string::npos) {
-		targetUrl = computeAbsolutePath(aidDirectory, targetUrl.substr(found+4));
-		redirectAid = rewriteUrl(targetUrl);
-	      } else {
-		throw "Unable to find the target url in redirection file " + path;
-	      }
-	    }
-	  }
-	}
-      }
+    /* Detect if this is a redirection */    
+    std::string targetUrl = extractRedirectUrlFromHtml(head_children);
+    if (!targetUrl.empty()) {
+      redirectAid = computeAbsolutePath(aidDirectory, decodeUrl(targetUrl));
     }
 
     /* Rewrite links (src|href|...) attributes */
