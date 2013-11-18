@@ -25,6 +25,12 @@
 
 #define MAX_QUEUE_SIZE 100
 
+#ifdef _WIN32
+#define SEPARATOR "\\"
+#else
+#define SEPARATOR "/"
+#endif
+
 bool verboseFlag = false;
 std::string language;
 std::string creator;
@@ -67,6 +73,62 @@ unsigned int getFileSize(const std::string &path) {
   stat(path.c_str(), &filestatus);
   return filestatus.st_size;
 }    
+
+std::string removeLastPathElement(const std::string path, const bool removePreSeparator, const bool removePostSeparator) {
+  std::string newPath = path;
+  size_t offset = newPath.find_last_of(SEPARATOR);
+  if (removePreSeparator && 
+      offset != newPath.find_first_of(SEPARATOR) && 
+      offset == newPath.length()-1) {
+    newPath = newPath.substr(0, offset);
+    offset = newPath.find_last_of(SEPARATOR);
+  }
+  newPath = removePostSeparator ? newPath.substr(0, offset) : newPath.substr(0, offset+1);
+  return newPath;
+}
+
+/* Warning: the relative path must be with slashes */
+std::string computeAbsolutePath(const std::string path, const std::string relativePath) {
+  std::string absolutePath;
+
+  if (path.empty()) {
+    char *path=NULL;
+    size_t size = 0;
+
+#ifdef _WIN32
+    path = _getcwd(path,size);
+#else
+    path = getcwd(path,size);
+#endif
+
+    absolutePath = std::string(path) + SEPARATOR;
+  } else {
+    absolutePath = path.substr(path.length() - 1, 1) == SEPARATOR ? path : path + SEPARATOR;
+  }
+
+#if _WIN32
+  char *cRelativePath = _strdup(relativePath.c_str());
+#else
+  char *cRelativePath = strdup(relativePath.c_str());
+#endif
+  char *token = strtok(cRelativePath, "/");
+
+  while (token != NULL) {
+    if (std::string(token) == "..") {
+      absolutePath = removeLastPathElement(absolutePath, true, false);
+      token = strtok(NULL, "/");
+    } else if (strcmp(token, ".") && strcmp(token, "")) {
+      absolutePath += std::string(token);
+      token = strtok(NULL, "/");
+      if (token != NULL)
+	absolutePath += SEPARATOR;
+    } else {
+      token = strtok(NULL, "/");
+    }
+  }
+
+  return absolutePath;
+}
 
 void directoryVisitorRunning(bool value) {
   pthread_mutex_lock(&directoryVisitorRunningMutex);
@@ -248,7 +310,7 @@ Article::Article(const std::string& path)
 	      std::string targetUrl = attribute->value;
 	      found = targetUrl.find("URL=") != std::string::npos ? targetUrl.find("URL=") : targetUrl.find("url=");
 	      if (found!=std::string::npos) {
-		targetUrl = targetUrl.substr(found);
+		targetUrl = computeAbsolutePath(aid, targetUrl.substr(found+4));
 		redirectAid = targetUrl;
 	      } else {
 		throw "Unable to find the target url in redirection file " + path;
@@ -431,7 +493,6 @@ int main(int argc, char** argv) {
   /* Init */
   magic = magic_open(MAGIC_MIME);
   magic_load(magic, NULL);
-
   pthread_mutex_init(&filenameQueueMutex, NULL);
   pthread_mutex_init(&directoryVisitorRunningMutex, NULL);
 
@@ -479,7 +540,6 @@ int main(int argc, char** argv) {
       case 'w':
 	welcome = optarg;
 	break;
-
       }
     }
   } while (c != -1);
