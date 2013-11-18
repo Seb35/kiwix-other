@@ -52,6 +52,7 @@ bool isDirectoryVisitorRunningFlag = false;
 magic_t magic;
 std::map<std::string, std::string> urls;
 std::map<std::string, const char*> dataCache;
+std::map<std::string, std::string> fileMimeTypes;
 
 char *getFileContent(const std::string &path, bool trailingNull) {
   std::ifstream is(path.c_str(), std::ifstream::binary);
@@ -322,9 +323,56 @@ static void replaceStringInPlace(std::string& subject, const std::string& search
   }
 }
 
+static std::string getMimeTypeForFile(const std::string& path) {
+  std::string mimeType;
+  
+  try {
+    if (fileMimeTypes.find(path) == fileMimeTypes.end()) {
+      mimeType = std::string(magic_file(magic, path.c_str()));
+      std::size_t found = mimeType.find(";");
+      if (found != std::string::npos) {
+	/* Don't remove the semi-colon, otherwise ZIM file is corrupt,
+	   strange */
+	mimeType = mimeType.substr(0, found+1);
+      }
+      
+      /* Cache result for further  usage */
+      fileMimeTypes[path] = mimeType;
+    } else {
+      mimeType = fileMimeTypes[path];
+    }
+  } catch (...) {
+    mimeType = "";
+  }
+
+  return mimeType;
+}
+
+static std::string getNamespaceForMimeType(const std::string& mimeType) {
+  if (mimeType.find("text") == 0 || mimeType.empty()) {
+    if (mimeType.find("text/html") == 0 || mimeType.empty()) {
+      return "A";
+    } else {
+      return "-";
+    }
+  } else {
+    return "I";
+  }
+}
+
+static std::string removeLocalTag(const std::string &url) {
+  std::size_t found = url.find("#");
+  
+  if (found != std::string::npos) {
+    return url.substr(0, found-1);
+  }
+  return url;
+}
+
 static std::string computeNewUrl(const std::string &filename) {
   if ( urls.find(filename) == urls.end() ) {
-    std::string url = "/A/" + filename.substr(directoryPath.size()+1);
+    std::string mimeType = getMimeTypeForFile(removeLocalTag(decodeUrl(filename)));
+    std::string url = "/" + getNamespaceForMimeType(mimeType) + "/" + filename.substr(directoryPath.size()+1);
     urls[filename] = url;
   }
   return urls[filename];
@@ -334,27 +382,14 @@ Article::Article(const std::string& path)
   : aid(path) {
 
   /* mime-type */
-  mimeType = std::string(magic_file(magic, path.c_str()));
-  std::size_t found = mimeType.find(";");
-  if (found != std::string::npos) {
-    /* Don't remove the semi-colon, otherwise ZIM file is corrupt,
-       strange */
-    mimeType = mimeType.substr(0, found+1);
-  }
+  mimeType = getMimeTypeForFile(path);
 
   /* namespace */
-  if (mimeType.find("text") == 0) {
-    if (mimeType.find("text/html") == 0) {
-      ns = 'A';
-    } else {
-      ns = '-';
-    }
-  } else {
-    ns = 'I';
-  }
-  ns = 'A';
+  ns = getNamespaceForMimeType(mimeType)[0];
 
+  /* HTML specific code */
   if (mimeType.find("text/html") != std::string::npos) {
+    std::size_t found;
     char *html = getFileContent(path, true);
     std::string aidDirectory = removeLastPathElement(aid, false, false);
     std::string htmlStr = html;
