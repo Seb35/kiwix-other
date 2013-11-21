@@ -579,7 +579,7 @@ zim::Blob ArticleSource::getData(const std::string& aid) {
 
 /* Non ZIM related code */
 void usage() {
-  std::cout << "zimwriterfs --welcome=html/index.html --favicon=images/favicon.png --language=fra --title=foobar --description=mydescription --creator=Wikipedia --publisher=Kiwix DIRECTORY ZIM" << std::endl;
+  std::cout << "zimwriterfs --welcome=html/index.html --favicon=images/favicon.png --language=fra --title=foobar --description=mydescription --creator=Wikipedia --publisher=Kiwix [--minChunkSize=1024] DIRECTORY ZIM" << std::endl;
   std::cout << "\tDIRECTORY is the path of the directory containing the HTML pages you want to put in the ZIM file," << std::endl;
   std::cout << "\tZIM       is the path of the ZIM file you want to obtain." << std::endl;
 }
@@ -626,7 +626,7 @@ void *visitDirectoryPath(void *path) {
 
 int main(int argc, char** argv) {
   ArticleSource source;
-
+  int minChunkSize = 2048;
   /* Init */
   magic = magic_open(MAGIC_MIME);
   magic_load(magic, NULL);
@@ -637,6 +637,7 @@ int main(int argc, char** argv) {
   static struct option long_options[] = {
     {"verbose", no_argument, 0, 'w'},
     {"welcome", required_argument, 0, 'w'},
+    {"minchunksize", required_argument, 0, 'm'},
     {"favicon", required_argument, 0, 'f'},
     {"language", required_argument, 0, 'l'},
     {"title", required_argument, 0, 't'},
@@ -649,7 +650,7 @@ int main(int argc, char** argv) {
   int c;
 
   do { 
-    c = getopt_long(argc, argv, "vw:f:t:d:c:l:p:", long_options, &option_index);
+    c = getopt_long(argc, argv, "vw:m:f:t:d:c:l:p:", long_options, &option_index);
     
     if (c != -1) {
       switch (c) {
@@ -667,6 +668,9 @@ int main(int argc, char** argv) {
 	break;
       case 'l':
 	language = optarg;
+	break;
+      case 'm':
+	minChunkSize = atoi(optarg);
 	break;
       case 'p':
 	publisher = optarg;
@@ -721,6 +725,7 @@ int main(int argc, char** argv) {
   /* ZIM creation */
   try {
     zimCreator.create(zimPath, source);
+    zimCreator.setMinChunkSize(minChunkSize);
   } catch (const std::exception& e) {
     std::cerr << e.what() << std::endl;
   }
