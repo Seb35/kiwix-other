@@ -337,6 +337,13 @@ static std::string getMimeTypeForFile(const std::string& path) {
 	mimeType = mimeType.substr(0, found+1);
       }
       
+      /* libmagic has some difficulties to detect css files */
+      if (mimeType.find("text/x-c") != std::string::npos && 
+	  (mimeType.find("css") != std::string::npos || 
+	   mimeType.find("CSS") != std::string::npos)) {
+	mimeType = "text/css";
+      }
+
       /* Cache result for further  usage */
       fileMimeTypes[path] = mimeType;
     } else {
