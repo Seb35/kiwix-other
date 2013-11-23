@@ -51,12 +51,13 @@ pthread_mutex_t directoryVisitorRunningMutex;
 bool isDirectoryVisitorRunningFlag = false;
 magic_t magic;
 std::map<std::string, std::string> urls;
-std::map<std::string, const char*> dataCache;
 std::map<std::string, std::string> fileMimeTypes;
+const char *data = NULL;
+unsigned int dataSize = 0;
 
 char *getFileContent(const std::string &path, bool trailingNull) {
   std::ifstream is(path.c_str(), std::ifstream::binary);
-  char * buffer = NULL;
+  char *buffer = NULL;
 
   if (is) {
     is.seekg(0, is.end);
@@ -391,8 +392,6 @@ Article::Article(const std::string& path)
   if (mimeType.find("text/html") != std::string::npos) {
     std::size_t found;
     char *html = getFileContent(path, true);
-    std::string aidDirectory = removeLastPathElement(aid, false, false);
-    std::string htmlStr = html;
     GumboOutput* output = gumbo_parse(html);
     GumboNode* root = output->root;
 
@@ -443,20 +442,8 @@ Article::Article(const std::string& path)
     /* Detect if this is a redirection */    
     std::string targetUrl = extractRedirectUrlFromHtml(head_children);
     if (!targetUrl.empty()) {
+      std::string aidDirectory = removeLastPathElement(aid, false, false);
       redirectAid = computeAbsolutePath(aidDirectory, decodeUrl(targetUrl));
-    }
-
-    /* Rewrite links (src|href|...) attributes */
-    if (redirectAid.empty()) {
-      std::map<std::string, bool> links;
-      getLinks(root, links);
-      std::map<std::string, bool>::iterator it;
-      for(it = links.begin(); it != links.end(); it++) {
-	std::string filename = computeAbsolutePath(aidDirectory, it->first);
-	std::string newUrl = computeNewUrl(filename);
-	replaceStringInPlace(htmlStr, it->first, newUrl);
-      }
-      dataCache[aid] = strdup(htmlStr.c_str());
     }
 
     gumbo_destroy_output(&kGumboDefaultOptions, output);
@@ -542,8 +529,14 @@ const zim::writer::Article* ArticleSource::getNextArticle() {
 
 zim::Blob ArticleSource::getData(const std::string& aid) {
   std::cout << "Packing data for " << aid << std::endl;
+
+  if (data != NULL) {
+    delete(data);
+  }
+
   if (aid.substr(0, 3) == "/M/") {
     std::string value; 
+
     if ( aid == "/M/Language") {
       value = language;
     } else if (aid == "/M/Creator") {
@@ -564,17 +557,37 @@ zim::Blob ArticleSource::getData(const std::string& aid) {
 	     << std::endl;
       value = stream.str();
     }
-    return zim::Blob(value.c_str(), value.size());
-  } else if (dataCache.find(aid) != dataCache.end()) {
-    const char *data = dataCache[aid];
-    unsigned int size = strlen(data);
-    dataCache.erase(aid);
-    return zim::Blob(data, size);
+
+    data = strdup(value.c_str());
+    dataSize = strlen(data);
+  } else if (getMimeTypeForFile(aid).find("text/html") == 0) {
+    char *html = getFileContent(aid, true);
+    std::string htmlStr = html;
+    std::string aidDirectory = removeLastPathElement(aid, false, false);
+    GumboOutput* output = gumbo_parse(html);
+    GumboNode* root = output->root;
+
+    /* Rewrite links (src|href|...) attributes */
+    std::map<std::string, bool> links;
+    getLinks(root, links);
+    std::map<std::string, bool>::iterator it;
+    for(it = links.begin(); it != links.end(); it++) {
+      if (!it->first.empty()) {
+	std::string filename = computeAbsolutePath(aidDirectory, it->first);
+	std::string newUrl = computeNewUrl(filename);
+	replaceStringInPlace(htmlStr, it->first, newUrl);
+      }
+    }
+    data = strdup(htmlStr.c_str());
+    dataSize = strlen(data);
+    gumbo_destroy_output(&kGumboDefaultOptions, output);
+    delete(html);
   } else {
-    const char *data = getFileContent(aid, false);
-    unsigned int size = getFileSize(aid);
-    return zim::Blob(data, size);
+    data = getFileContent(aid, false);
+    dataSize = getFileSize(aid);
   }
+
+  return zim::Blob(data, dataSize);
 }
 
 /* Non ZIM related code */
