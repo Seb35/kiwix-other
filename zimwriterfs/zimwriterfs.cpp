@@ -571,8 +571,7 @@ zim::Blob ArticleSource::getData(const std::string& aid) {
       std::stringstream stream;
       stream << (now->tm_year + 1900) << '-' 
 	     << (now->tm_mon + 1) << '-'
-	     << now->tm_mday
-	     << std::endl;
+	     << now->tm_mday;
       value = stream.str();
     }
 
