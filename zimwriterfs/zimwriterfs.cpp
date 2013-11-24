@@ -86,6 +86,17 @@ unsigned int getFileSize(const std::string &path) {
   return filestatus.st_size;
 }    
 
+bool fileExists(const std::string &path) {
+  bool flag = false;
+  std::fstream fin;
+  fin.open(path.c_str(), std::ios::in);
+  if (fin.is_open()) {
+    flag = true;
+  }
+  fin.close();
+  return flag;
+}
+
 std::string decodeUrl(const std::string &SRC) {
   std::string ret;
   char ch;
@@ -728,11 +739,6 @@ int main(int argc, char** argv) {
     directoryPath = directoryPath.substr(0, directoryPath.length()-1);
   }
 
-  /* Directory visitor */
-  directoryVisitorRunning(true);
-  pthread_create(&(directoryVisitor), NULL, visitDirectoryPath, (void*)NULL);
-  pthread_detach(directoryVisitor);
-
   /* Prepare metadata */
   metadataQueue.push("Language");
   metadataQueue.push("Publisher");
@@ -741,6 +747,22 @@ int main(int argc, char** argv) {
   metadataQueue.push("Description");
   metadataQueue.push("Date");
   metadataQueue.push("Favicon");
+
+  /* Check metadata */
+  if (!fileExists(source.getMainPage())) {
+    std::cerr << "Unable to find welcome page " << source.getMainPage() << std::endl;
+    exit(1);
+  }
+
+  if (!fileExists(directoryPath + "/" + favicon)) {
+    std::cerr << "Unable to find welcome page " << directoryPath << "/" << favicon << std::endl;
+    exit(1);
+  }
+
+  /* Directory visitor */
+  directoryVisitorRunning(true);
+  pthread_create(&(directoryVisitor), NULL, visitDirectoryPath, (void*)NULL);
+  pthread_detach(directoryVisitor);
 
   /* ZIM creation */
   try {
