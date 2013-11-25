@@ -2,7 +2,7 @@
 AC_INIT([zimwriterfs], [0.1])
 
 # where are autotools scripts located
-AC_CONFIG_AUX_DIR([.]) 
+AC_CONFIG_AUX_DIR([.])
 
 AM_INIT_AUTOMAKE
 AM_MAINTAINER_MODE
@@ -34,7 +34,7 @@ AC_LANG(C++)
 AC_CHECK_FUNCS([stat64])
 
 # cxxflags
-CXXFLAGS=" -Igumbo "
+CXXFLAGS=" -Igumbo $CXXFLAGS"
 CFLAGS=" -std=gnu99 -std=c99"
 
 # liblzma
