@@ -277,7 +277,10 @@ class MetadataArticle : public Article {
 };
 
 static bool isLocalUrl(const std::string url) {
-  return url.find("://") == std::string::npos;
+  if (url.find(":") != std::string::npos) {
+    return (!(url.find("://") != std::string::npos || url.find("//") == 0 || url.find("tel:") == 0));
+  }
+  return true;
 }
 
 static std::string extractRedirectUrlFromHtml(const GumboVector* head_children) {
