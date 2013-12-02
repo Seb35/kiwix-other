@@ -612,7 +612,7 @@ zim::Blob ArticleSource::getData(const std::string& aid) {
 
 /* Non ZIM related code */
 void usage() {
-  std::cout << "zimwriterfs --welcome=html/index.html --favicon=images/favicon.png --language=fra --title=foobar --description=mydescription --creator=Wikipedia --publisher=Kiwix [--minChunkSize=1024] DIRECTORY ZIM" << std::endl;
+  std::cout << "zimwriterfs --welcome=html/index.html --favicon=media/favicon.png --language=fra --title=foobar --description=mydescription --creator=Wikipedia --publisher=Kiwix [--minChunkSize=1024] DIRECTORY ZIM" << std::endl;
   std::cout << "\tDIRECTORY is the path of the directory containing the HTML pages you want to put in the ZIM file," << std::endl;
   std::cout << "\tZIM       is the path of the ZIM file you want to obtain." << std::endl;
 }
