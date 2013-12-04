@@ -278,7 +278,12 @@ class MetadataArticle : public Article {
 
 static bool isLocalUrl(const std::string url) {
   if (url.find(":") != std::string::npos) {
-    return (!(url.find("://") != std::string::npos || url.find("//") == 0 || url.find("tel:") == 0));
+    return (!(
+	      url.find("://") != std::string::npos || 
+	      url.find("//") == 0 || 
+	      url.find("tel:") == 0 || 
+	      url.find("geo:") == 0
+	      ));
   }
   return true;
 }
