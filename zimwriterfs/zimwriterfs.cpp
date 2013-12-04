@@ -50,6 +50,7 @@ std::queue<std::string> metadataQueue;
 pthread_mutex_t directoryVisitorRunningMutex;
 bool isDirectoryVisitorRunningFlag = false;
 magic_t magic;
+std::map<std::string, unsigned int> counters;
 std::map<std::string, std::string> urls;
 std::map<std::string, std::string> fileMimeTypes;
 const char *data = NULL;
@@ -277,6 +278,7 @@ class MetadataArticle : public Article {
 };
 
 static bool isLocalUrl(const std::string url) {
+  return true;
   if (url.find(":") != std::string::npos) {
     return (!(
 	      url.find("://") != std::string::npos || 
@@ -351,9 +353,7 @@ static std::string getMimeTypeForFile(const std::string& path) {
       mimeType = std::string(magic_file(magic, path.c_str()));
       std::size_t found = mimeType.find(";");
       if (found != std::string::npos) {
-	/* Don't remove the semi-colon, otherwise ZIM file is corrupt,
-	   strange */
-	mimeType = mimeType.substr(0, found+1);
+	mimeType = mimeType.substr(0, found);
       }
       
       /* libmagic has some difficulties to detect css files */
@@ -548,7 +548,15 @@ const zim::writer::Article* ArticleSource::getNextArticle() {
     article = new Article(aid);
   }
 
-  std::cout << "Creating entry for " << aid << std::endl;  
+  /* Count mimetypes */
+  if (article != NULL && !article->isRedirect()) {
+    std::string mimeType = article->getMimeType();
+    if (counters.find(mimeType) == counters.end()) {
+      counters[mimeType] = 1;
+    } else {
+      counters[mimeType]++;
+    }
+  }
 
   return article;
 }
@@ -580,6 +588,12 @@ zim::Blob ArticleSource::getData(const std::string& aid) {
       stream << (now->tm_year + 1900) << '-' 
 	     << (now->tm_mon + 1) << '-'
 	     << now->tm_mday;
+      value = stream.str();
+    } else if ( aid == "/M/Counter") {
+      std::stringstream stream;
+      for (std::map<std::string, unsigned int>::iterator it = counters.begin(); it != counters.end(); ++it) {
+	stream << it->first << "=" << it->second << ";";
+      }
       value = stream.str();
     }
 
@@ -754,6 +768,7 @@ int main(int argc, char** argv) {
   metadataQueue.push("Description");
   metadataQueue.push("Date");
   metadataQueue.push("Favicon");
+  metadataQueue.push("Counter");
 
   /* Check metadata */
   if (!fileExists(source.getMainPage())) {
