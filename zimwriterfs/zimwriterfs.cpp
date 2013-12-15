@@ -53,32 +53,21 @@ magic_t magic;
 std::map<std::string, unsigned int> counters;
 std::map<std::string, std::string> urls;
 std::map<std::string, std::string> fileMimeTypes;
-const char *data = NULL;
+char *data = NULL;
 unsigned int dataSize = 0;
 
-char *getFileContent(const std::string &path, bool trailingNull) {
-  std::ifstream is(path.c_str(), std::ifstream::binary);
-  char *buffer = NULL;
-
-  if (is) {
-    is.seekg(0, is.end);
-    int length = is.tellg();
-    is.seekg(0, is.beg);
-
-    if (trailingNull) {
-      buffer = new char[length+1];
-      buffer[length] = 0;
-    } else {
-      buffer = new char[length];
-    }
-
-    is.read(buffer,length);
-    if (!is)
-      throw "error: unable to read completly " + path;
-    is.close();
+inline std::string getFileContent(const std::string &path) {
+  std::ifstream in(path.c_str(), ::std::ios::binary);
+  if (in) {
+    std::string contents;
+    in.seekg(0, std::ios::end);
+    contents.resize(in.tellg());
+    in.seekg(0, std::ios::beg);
+    in.read(&contents[0], contents.size());
+    in.close();
+    return(contents);
   }
-
-  return buffer;
+  throw(errno);
 }
 
 unsigned int getFileSize(const std::string &path) {
@@ -98,77 +87,55 @@ bool fileExists(const std::string &path) {
   return flag;
 }
 
-std::string decodeUrl(const std::string &SRC) {
-  std::string ret;
+std::string decodeUrl(const std::string &encodedUrl) {
+  std::string decodedUrl = encodedUrl;
+  std::string::size_type pos = 0;
   char ch;
-  unsigned int i, ii;
-  for (i=0; i<SRC.length(); i++) {
-    if (int(SRC[i])==37) {
-      sscanf(SRC.substr(i+1,2).c_str(), "%x", &ii);
-      ch=static_cast<char>(ii);
-      ret+=ch;
-      i=i+2;
-    } else {
-      ret+=SRC[i];
-    }
+
+  while ((pos = decodedUrl.find('%', pos)) != std::string::npos &&
+	 pos + 2 < decodedUrl.length()) {
+    sscanf(decodedUrl.substr(pos + 1, 2).c_str(), "%x", (unsigned int*)&ch);
+    decodedUrl.replace(pos, 3, 1, ch);
+    ++pos;
   }
-  return (ret);
+
+  return decodedUrl;
 }
 
 std::string removeLastPathElement(const std::string path, const bool removePreSeparator, const bool removePostSeparator) {
   std::string newPath = path;
   size_t offset = newPath.find_last_of(SEPARATOR);
-  if (removePreSeparator && 
-      offset != newPath.find_first_of(SEPARATOR) && 
-      offset == newPath.length()-1) {
+ 
+  if (removePreSeparator && offset == newPath.length()-1) {
     newPath = newPath.substr(0, offset);
     offset = newPath.find_last_of(SEPARATOR);
   }
   newPath = removePostSeparator ? newPath.substr(0, offset) : newPath.substr(0, offset+1);
+
   return newPath;
 }
 
 /* Warning: the relative path must be with slashes */
 std::string computeAbsolutePath(const std::string path, const std::string relativePath) {
-  std::string absolutePath;
 
-  if (path.empty()) {
-    char *path=NULL;
-    size_t size = 0;
+  /* Add a trailing / to the path if necessary */
+  std::string absolutePath = path[path.length()-1] == '/' ? path : removeLastPathElement(path, false, false);
 
-#ifdef _WIN32
-    path = _getcwd(path,size);
-#else
-    path = getcwd(path,size);
-#endif
-
-    absolutePath = std::string(path) + SEPARATOR;
-  } else {
-    absolutePath = path.substr(path.length()-1, 1) == SEPARATOR ? path : path + SEPARATOR;
-  }
-
-#if _WIN32
-  char *cRelativePath = _strdup(relativePath.c_str());
-#else
-  char *cRelativePath = strdup(relativePath.c_str());
-#endif
-  char *token = strtok(cRelativePath, "/");
-
-  while (token != NULL) {
-    if (std::string(token) == "..") {
-      absolutePath = removeLastPathElement(absolutePath, true, false);
-      token = strtok(NULL, "/");
-    } else if (strcmp(token, ".") && strcmp(token, "")) {
-      absolutePath += std::string(token);
-      token = strtok(NULL, "/");
-      if (token != NULL)
-	absolutePath += SEPARATOR;
-    } else {
-      token = strtok(NULL, "/");
+  /* Go through relative path */
+  std::vector<std::string> relativePathElements;
+  std::stringstream relativePathStream(relativePath);
+  std::string relativePathItem;
+  while (std::getline(relativePathStream, relativePathItem, '/')) {
+    if (relativePathItem == "..") {
+      absolutePath = removeLastPathElement(absolutePath, true, false); 
+    } else if (!relativePathItem.empty() && relativePathItem != ".") {
+      absolutePath += relativePathItem;
+      absolutePath += "/";
     }
   }
-
-  return absolutePath;
+  
+  /* Remove wront trailing / */
+  return absolutePath.substr(0, absolutePath.length()-1);
 }
 
 std::string rewriteUrl(std::string) {
@@ -265,7 +232,7 @@ class MetadataArticle : public Article {
     if (id == "Favicon") {
       aid = "/-/" + id;
       mimeType="image/png";
-      redirectAid = directoryPath + "/" + favicon;
+      redirectAid = favicon;
       ns = '-';
       url = "favicon";
     } else {
@@ -278,12 +245,11 @@ class MetadataArticle : public Article {
 };
 
 static bool isLocalUrl(const std::string url) {
-  return true;
   if (url.find(":") != std::string::npos) {
     return (!(
-	      url.find("://") != std::string::npos || 
-	      url.find("//") == 0 || 
-	      url.find("tel:") == 0 || 
+	      url.find("://") != std::string::npos ||
+	      url.find("//") == 0 ||
+	      url.find("tel:") == 0 ||
 	      url.find("geo:") == 0
 	      ));
   }
@@ -322,10 +288,12 @@ static void getLinks(GumboNode* node, std::map<std::string, bool> &links) {
     return;
   }
 
-  GumboAttribute* attribute;
-  if (attribute = gumbo_get_attribute(&node->v.element.attributes, "href")) {
-  } else if (attribute = gumbo_get_attribute(&node->v.element.attributes, "src")) {
+  GumboAttribute* attribute = NULL;
+  attribute = gumbo_get_attribute(&node->v.element.attributes, "href");
+  if (attribute == NULL) {
+    attribute = gumbo_get_attribute(&node->v.element.attributes, "src");
   }
+
   if (attribute != NULL && isLocalUrl(attribute->value)) {
     links[attribute->value] = true;
   }
@@ -405,8 +373,13 @@ static std::string computeNewUrl(const std::string &filename) {
   return urls[filename];
 }
 
-Article::Article(const std::string& path)
-  : aid(path) {
+Article::Article(const std::string& path) {
+
+  /* aid */
+  aid = path.substr(directoryPath.size()+1);
+
+  /* url */
+  url = aid;
 
   /* mime-type */
   mimeType = getMimeTypeForFile(path);
@@ -417,8 +390,8 @@ Article::Article(const std::string& path)
   /* HTML specific code */
   if (mimeType.find("text/html") != std::string::npos) {
     std::size_t found;
-    char *html = getFileContent(path, true);
-    GumboOutput* output = gumbo_parse(html);
+    std::string html = getFileContent(path);
+    GumboOutput* output = gumbo_parse(html.c_str());
     GumboNode* root = output->root;
 
     /* Search the content of the <title> tag in the HTML */
@@ -468,16 +441,11 @@ Article::Article(const std::string& path)
     /* Detect if this is a redirection */    
     std::string targetUrl = extractRedirectUrlFromHtml(head_children);
     if (!targetUrl.empty()) {
-      std::string aidDirectory = removeLastPathElement(aid, false, false);
-      redirectAid = computeAbsolutePath(aidDirectory, decodeUrl(targetUrl));
+      redirectAid = computeAbsolutePath(aid, decodeUrl(targetUrl));
     }
 
     gumbo_destroy_output(&kGumboDefaultOptions, output);
-    delete(html);
   }
-
-  /* url */
-  url = path.substr(directoryPath.size()+1);
 }
 
 std::string Article::getAid() const
@@ -533,23 +501,30 @@ ArticleSource::ArticleSource() {
 }
 
 std::string ArticleSource::getMainPage() {
-  return directoryPath + "/" + welcome;
+  return welcome;
 }
 
+Article *article = NULL;
 const zim::writer::Article* ArticleSource::getNextArticle() {
-  std::string aid;
-  Article *article = NULL;
+  std::string path;
+
+  if (article != NULL) {
+    delete(article);
+  }
 
   if (!metadataQueue.empty()) {
-    aid = metadataQueue.front();
+    path = metadataQueue.front();
     metadataQueue.pop();
-    article = new MetadataArticle(aid);
-  } else if (popFromFilenameQueue(aid)) {
-    article = new Article(aid);
+    article = new MetadataArticle(path);
+  } else if (popFromFilenameQueue(path)) {
+    article = new Article(path);
+  } else {
+    article = NULL;
   }
 
   /* Count mimetypes */
   if (article != NULL && !article->isRedirect()) {
+    std::cout << "Creating entry for " << article->getAid() << std::endl;
     std::string mimeType = article->getMimeType();
     if (counters.find(mimeType) == counters.end()) {
       counters[mimeType] = 1;
@@ -566,6 +541,7 @@ zim::Blob ArticleSource::getData(const std::string& aid) {
 
   if (data != NULL) {
     delete(data);
+    data = NULL;
   }
 
   if (aid.substr(0, 3) == "/M/") {
@@ -597,33 +573,39 @@ zim::Blob ArticleSource::getData(const std::string& aid) {
       value = stream.str();
     }
 
-    data = strdup(value.c_str());
-    dataSize = strlen(data);
-  } else if (getMimeTypeForFile(aid).find("text/html") == 0) {
-    char *html = getFileContent(aid, true);
-    std::string htmlStr = html;
-    std::string aidDirectory = removeLastPathElement(aid, false, false);
-    GumboOutput* output = gumbo_parse(html);
-    GumboNode* root = output->root;
-
-    /* Rewrite links (src|href|...) attributes */
-    std::map<std::string, bool> links;
-    getLinks(root, links);
-    std::map<std::string, bool>::iterator it;
-    for(it = links.begin(); it != links.end(); it++) {
-      if (!it->first.empty()) {
-	std::string filename = computeAbsolutePath(aidDirectory, it->first);
-	std::string newUrl = computeNewUrl(filename);
-	replaceStringInPlace(htmlStr, it->first, newUrl);
-      }
-    }
-    data = strdup(htmlStr.c_str());
-    dataSize = strlen(data);
-    gumbo_destroy_output(&kGumboDefaultOptions, output);
-    delete(html);
+    dataSize = value.length();
+    data = new char[dataSize];
+    memcpy(data, value.c_str(), dataSize);
   } else {
-    data = getFileContent(aid, false);
-    dataSize = getFileSize(aid);
+    std::string aidPath = directoryPath + "/" + aid;
+    
+    if (getMimeTypeForFile(aidPath).find("text/html") == 0) {
+      std::string html = getFileContent(aidPath);
+      GumboOutput* output = gumbo_parse(html.c_str());
+      GumboNode* root = output->root;
+      
+      /* Rewrite links (src|href|...) attributes */
+      std::map<std::string, bool> links;
+      getLinks(root, links);
+      std::map<std::string, bool>::iterator it;
+      std::string aidDirectory = removeLastPathElement(aid, false, false);
+      for(it = links.begin(); it != links.end(); it++) {
+	if (!it->first.empty()) {
+	  std::string filename = computeAbsolutePath(removeLastPathElement(aidPath, false, false), it->first);
+	  std::string newUrl = computeNewUrl(filename);
+	  replaceStringInPlace(html, it->first, newUrl);
+	}
+      }
+      gumbo_destroy_output(&kGumboDefaultOptions, output);
+      
+      dataSize = html.length();
+      data = new char[dataSize];
+      memcpy(data, html.c_str(), dataSize);
+    } else {
+      dataSize = getFileSize(aidPath);
+      data = new char[dataSize];
+      memcpy(data, getFileContent(aidPath).c_str(), dataSize);
+    }
   }
 
   return zim::Blob(data, dataSize);
@@ -679,6 +661,7 @@ void *visitDirectoryPath(void *path) {
 int main(int argc, char** argv) {
   ArticleSource source;
   int minChunkSize = 2048;
+
   /* Init */
   magic = magic_open(MAGIC_MIME);
   magic_load(magic, NULL);
@@ -771,13 +754,13 @@ int main(int argc, char** argv) {
   metadataQueue.push("Counter");
 
   /* Check metadata */
-  if (!fileExists(source.getMainPage())) {
-    std::cerr << "Unable to find welcome page " << source.getMainPage() << std::endl;
+  if (!fileExists(directoryPath + "/" + welcome)) {
+    std::cerr << "Unable to find welcome page " << directoryPath << "/" << welcome << std::endl;
     exit(1);
   }
 
   if (!fileExists(directoryPath + "/" + favicon)) {
-    std::cerr << "Unable to find welcome page " << directoryPath << "/" << favicon << std::endl;
+    std::cerr << "Unable to find favicon " << directoryPath << "/" << favicon << std::endl;
     exit(1);
   }
 
