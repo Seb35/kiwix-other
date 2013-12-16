@@ -70,13 +70,13 @@ inline std::string getFileContent(const std::string &path) {
   throw(errno);
 }
 
-unsigned int getFileSize(const std::string &path) {
+inline unsigned int getFileSize(const std::string &path) {
   struct stat filestatus;
   stat(path.c_str(), &filestatus);
   return filestatus.st_size;
 }    
 
-bool fileExists(const std::string &path) {
+inline bool fileExists(const std::string &path) {
   bool flag = false;
   std::fstream fin;
   fin.open(path.c_str(), std::ios::in);
@@ -87,7 +87,7 @@ bool fileExists(const std::string &path) {
   return flag;
 }
 
-std::string decodeUrl(const std::string &encodedUrl) {
+inline std::string decodeUrl(const std::string &encodedUrl) {
   std::string decodedUrl = encodedUrl;
   std::string::size_type pos = 0;
   char ch;
@@ -102,7 +102,7 @@ std::string decodeUrl(const std::string &encodedUrl) {
   return decodedUrl;
 }
 
-std::string removeLastPathElement(const std::string path, const bool removePreSeparator, const bool removePostSeparator) {
+inline std::string removeLastPathElement(const std::string path, const bool removePreSeparator, const bool removePostSeparator) {
   std::string newPath = path;
   size_t offset = newPath.find_last_of(SEPARATOR);
  
@@ -116,7 +116,7 @@ std::string removeLastPathElement(const std::string path, const bool removePreSe
 }
 
 /* Warning: the relative path must be with slashes */
-std::string computeAbsolutePath(const std::string path, const std::string relativePath) {
+inline std::string computeAbsolutePath(const std::string path, const std::string relativePath) {
 
   /* Add a trailing / to the path if necessary */
   std::string absolutePath = path[path.length()-1] == '/' ? path : removeLastPathElement(path, false, false);
@@ -138,7 +138,7 @@ std::string computeAbsolutePath(const std::string path, const std::string relati
   return absolutePath.substr(0, absolutePath.length()-1);
 }
 
-std::string rewriteUrl(std::string) {
+inline std::string rewriteUrl(std::string) {
   std::string result;
   return result;
 }
@@ -313,11 +313,12 @@ static void replaceStringInPlace(std::string& subject, const std::string& search
   }
 }
 
-static std::string getMimeTypeForFile(const std::string& path) {
+static std::string getMimeTypeForFile(const std::string& filename) {
   std::string mimeType;
   
   try {
-    if (fileMimeTypes.find(path) == fileMimeTypes.end()) {
+    if (fileMimeTypes.find(filename) == fileMimeTypes.end()) {
+      std::string path = directoryPath + "/" + filename;
       mimeType = std::string(magic_file(magic, path.c_str()));
       std::size_t found = mimeType.find(";");
       if (found != std::string::npos) {
@@ -332,9 +333,9 @@ static std::string getMimeTypeForFile(const std::string& path) {
       }
 
       /* Cache result for further  usage */
-      fileMimeTypes[path] = mimeType;
+      fileMimeTypes[filename] = mimeType;
     } else {
-      mimeType = fileMimeTypes[path];
+      mimeType = fileMimeTypes[filename];
     }
   } catch (...) {
     mimeType = "";
@@ -343,7 +344,7 @@ static std::string getMimeTypeForFile(const std::string& path) {
   return mimeType;
 }
 
-static std::string getNamespaceForMimeType(const std::string& mimeType) {
+inline std::string getNamespaceForMimeType(const std::string& mimeType) {
   if (mimeType.find("text") == 0 || mimeType.empty()) {
     if (mimeType.find("text/html") == 0 || mimeType.empty()) {
       return "A";
@@ -355,7 +356,7 @@ static std::string getNamespaceForMimeType(const std::string& mimeType) {
   }
 }
 
-static std::string removeLocalTag(const std::string &url) {
+inline std::string removeLocalTag(const std::string &url) {
   std::size_t found = url.find("#");
   
   if (found != std::string::npos) {
@@ -364,10 +365,10 @@ static std::string removeLocalTag(const std::string &url) {
   return url;
 }
 
-static std::string computeNewUrl(const std::string &filename) {
+inline std::string computeNewUrl(const std::string &filename) {
   if ( urls.find(filename) == urls.end() ) {
     std::string mimeType = getMimeTypeForFile(removeLocalTag(decodeUrl(filename)));
-    std::string url = "/" + getNamespaceForMimeType(mimeType) + "/" + filename.substr(directoryPath.size()+1);
+    std::string url = "/" + getNamespaceForMimeType(mimeType) + "/" + filename;
     urls[filename] = url;
   }
   return urls[filename];
@@ -382,7 +383,7 @@ Article::Article(const std::string& path) {
   url = aid;
 
   /* mime-type */
-  mimeType = getMimeTypeForFile(path);
+  mimeType = getMimeTypeForFile(aid);
 
   /* namespace */
   ns = getNamespaceForMimeType(mimeType)[0];
@@ -484,8 +485,7 @@ std::string Article::getRedirectAid() const
 }
 
 bool Article::shouldCompress() const {
-  std::string mimeType = getMimeType();
-  return (mimeType.find("text") == 0 ? true : false);
+  return (getMimeType().find("text") == 0 ? true : false);
 }
 
 /* ArticleSource class */
@@ -579,7 +579,7 @@ zim::Blob ArticleSource::getData(const std::string& aid) {
   } else {
     std::string aidPath = directoryPath + "/" + aid;
     
-    if (getMimeTypeForFile(aidPath).find("text/html") == 0) {
+    if (getMimeTypeForFile(aid).find("text/html") == 0) {
       std::string html = getFileContent(aidPath);
       GumboOutput* output = gumbo_parse(html.c_str());
       GumboNode* root = output->root;
@@ -591,9 +591,7 @@ zim::Blob ArticleSource::getData(const std::string& aid) {
       std::string aidDirectory = removeLastPathElement(aid, false, false);
       for(it = links.begin(); it != links.end(); it++) {
 	if (!it->first.empty()) {
-	  std::string filename = computeAbsolutePath(removeLastPathElement(aidPath, false, false), it->first);
-	  std::string newUrl = computeNewUrl(filename);
-	  replaceStringInPlace(html, it->first, newUrl);
+	  replaceStringInPlace(html, it->first, computeNewUrl(computeAbsolutePath(aid, it->first)));
 	}
       }
       gumbo_destroy_output(&kGumboDefaultOptions, output);
