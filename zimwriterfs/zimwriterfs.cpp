@@ -565,7 +565,7 @@ zim::Blob ArticleSource::getData(const std::string& aid) {
       stream << (now->tm_year + 1900) << '-' 
 	     << std::setw(2) << std::setfill('0') << (now->tm_mon + 1) << '-'
 	     << std::setw(2) << std::setfill('0') << now->tm_mday;
-      std::string value = stream.str();
+      value = stream.str();
     } else if ( aid == "/M/Counter") {
       std::stringstream stream;
       for (std::map<std::string, unsigned int>::iterator it = counters.begin(); it != counters.end(); ++it) {
