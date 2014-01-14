@@ -591,7 +591,7 @@ zim::Blob ArticleSource::getData(const std::string& aid) {
       std::map<std::string, bool>::iterator it;
       std::string aidDirectory = removeLastPathElement(aid, false, false);
       for(it = links.begin(); it != links.end(); it++) {
-	if (!it->first.empty()) {
+	if (!it->first.empty() && it->first[0] != '#') {
 	  replaceStringInPlace(html, it->first, computeNewUrl(computeAbsolutePath(aid, it->first)));
 	}
       }
