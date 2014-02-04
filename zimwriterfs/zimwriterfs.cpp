@@ -54,6 +54,7 @@ magic_t magic;
 std::map<std::string, unsigned int> counters;
 std::map<std::string, std::string> urls;
 std::map<std::string, std::string> fileMimeTypes;
+std::map<std::string, std::string> extMimeTypes;
 char *data = NULL;
 unsigned int dataSize = 0;
 
@@ -315,34 +316,34 @@ static void replaceStringInPlace(std::string& subject, const std::string& search
 }
 
 static std::string getMimeTypeForFile(const std::string& filename) {
-  std::string mimeType;
-  
-  try {
-    if (fileMimeTypes.find(filename) == fileMimeTypes.end()) {
-      std::string path = directoryPath + "/" + filename;
-      mimeType = std::string(magic_file(magic, path.c_str()));
-      std::size_t found = mimeType.find(";");
-      if (found != std::string::npos) {
-	mimeType = mimeType.substr(0, found);
-      }
-      
-      /* libmagic has some difficulties to detect css files */
-      if (mimeType.find("text/x-c") != std::string::npos && 
-	  (mimeType.find("css") != std::string::npos || 
-	   mimeType.find("CSS") != std::string::npos)) {
-	mimeType = "text/css";
-      }
-
-      /* Cache result for further  usage */
-      fileMimeTypes[filename] = mimeType;
-    } else {
-      mimeType = fileMimeTypes[filename];
-    }
-  } catch (...) {
-    mimeType = "";
+  /* Try to get the mimeType from the cache */
+  if (fileMimeTypes.find(filename) != fileMimeTypes.end()) {
+    return fileMimeTypes[filename];
   }
 
-  return mimeType;
+  /* Try to get the mimeType from the file extension */
+  std::string mimeType;
+  if (filename.find_last_of(".") != std::string::npos) {
+    mimeType = filename.substr(filename.find_last_of(".")+1);
+    if (extMimeTypes.find(mimeType) != extMimeTypes.end()) {
+      mimeType = extMimeTypes[mimeType];
+      fileMimeTypes[filename] = mimeType;
+      return mimeType;
+    }
+  }
+
+  /* Try to get the mimeType with libmagic */
+  try {
+    std::string path = directoryPath + "/" + filename;
+    mimeType = std::string(magic_file(magic, path.c_str()));
+    if (mimeType.find(";") != std::string::npos) {
+      mimeType = mimeType.substr(0, mimeType.find(";"));
+    }
+    fileMimeTypes[filename] = mimeType;
+    return mimeType;
+  } catch (...) {
+    return "";
+  }
 }
 
 inline std::string getNamespaceForMimeType(const std::string& mimeType) {
@@ -385,7 +386,7 @@ Article::Article(const std::string& path) {
 
   /* mime-type */
   mimeType = getMimeTypeForFile(aid);
-
+  
   /* namespace */
   ns = getNamespaceForMimeType(mimeType)[0];
 
@@ -666,6 +667,38 @@ int main(int argc, char** argv) {
   magic_load(magic, NULL);
   pthread_mutex_init(&filenameQueueMutex, NULL);
   pthread_mutex_init(&directoryVisitorRunningMutex, NULL);
+
+  /* Init file extensions hash */
+  extMimeTypes["HTML"] = "text/html";
+  extMimeTypes["html"] = "text/html";
+  extMimeTypes["HTM"] = "text/html";
+  extMimeTypes["htm"] = "text/html";
+  extMimeTypes["PNG"] = "image/png";
+  extMimeTypes["png"] = "image/png";
+  extMimeTypes["TIFF"] = "image/tiff";
+  extMimeTypes["tiff"] = "image/tiff";
+  extMimeTypes["TIF"] = "image/tiff";
+  extMimeTypes["tif"] = "image/tiff";
+  extMimeTypes["JPEG"] = "image/jpeg";
+  extMimeTypes["jpeg"] = "image/jpeg";
+  extMimeTypes["JPG"] = "image/jpeg";
+  extMimeTypes["jpg"] = "image/jpeg";
+  extMimeTypes["GIF"] = "image/gif";
+  extMimeTypes["gif"] = "image/gif";
+  extMimeTypes["SVG"] = "image/svg+xml";
+  extMimeTypes["svg"] = "image/svg+xml";
+  extMimeTypes["TXT"] = "text/plain";
+  extMimeTypes["txt"] = "text/plain";
+  extMimeTypes["XML"] = "text/xml";
+  extMimeTypes["xml"] = "text/xml";
+  extMimeTypes["PDF"] = "application/pdf";
+  extMimeTypes["pdf"] = "application/pdf";
+  extMimeTypes["OGG"] = "application/ogg";
+  extMimeTypes["ogg"] = "application/ogg";
+  extMimeTypes["JS"] = "application/javascript";
+  extMimeTypes["js"] = "application/javascript";
+  extMimeTypes["CSS"] = "text/css";
+  extMimeTypes["css"] = "text/css";
 
   /* Argument parsing */
   static struct option long_options[] = {
