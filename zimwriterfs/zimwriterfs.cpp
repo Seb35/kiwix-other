@@ -316,20 +316,19 @@ static void replaceStringInPlace(std::string& subject, const std::string& search
 }
 
 static std::string getMimeTypeForFile(const std::string& filename) {
-  /* Try to get the mimeType from the cache */
-  if (fileMimeTypes.find(filename) != fileMimeTypes.end()) {
-    return fileMimeTypes[filename];
-  }
+  std::string mimeType;
 
   /* Try to get the mimeType from the file extension */
-  std::string mimeType;
   if (filename.find_last_of(".") != std::string::npos) {
     mimeType = filename.substr(filename.find_last_of(".")+1);
     if (extMimeTypes.find(mimeType) != extMimeTypes.end()) {
-      mimeType = extMimeTypes[mimeType];
-      fileMimeTypes[filename] = mimeType;
-      return mimeType;
+      return extMimeTypes[mimeType];
     }
+  }
+
+  /* Try to get the mimeType from the cache */
+  if (fileMimeTypes.find(filename) != fileMimeTypes.end()) {
+    return fileMimeTypes[filename];
   }
 
   /* Try to get the mimeType with libmagic */
