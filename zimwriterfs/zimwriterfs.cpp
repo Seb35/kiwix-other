@@ -437,13 +437,16 @@ Article::Article(const std::string& path) {
       } else {
 	title = path;
       }
-      std::replace( title.begin(), title.end(), '_',  ' ');
+      std::replace(title.begin(), title.end(), '_',  ' ');
     }
 
     /* Detect if this is a redirection */    
     std::string targetUrl = extractRedirectUrlFromHtml(head_children);
     if (!targetUrl.empty()) {
       redirectAid = computeAbsolutePath(aid, decodeUrl(targetUrl));
+      if (!fileExists(directoryPath + "/" + redirectAid)) {
+	redirectAid.clear();
+      }
     }
 
     gumbo_destroy_output(&kGumboDefaultOptions, output);
