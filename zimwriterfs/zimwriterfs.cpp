@@ -207,6 +207,7 @@ bool popFromFilenameQueue(std::string &filename) {
 class Article : public zim::writer::Article {
   protected:
     char ns;
+    bool invalid;
     std::string aid;
     std::string url;
     std::string title;
@@ -215,12 +216,15 @@ class Article : public zim::writer::Article {
     std::string data;
 
   public:
-    Article() { }
+    Article() {
+      invalid = false;
+    }
     explicit Article(const std::string& id);
   
     virtual std::string getAid() const;
     virtual char getNamespace() const;
     virtual std::string getUrl() const;
+    virtual bool isInvalid() const;
     virtual std::string getTitle() const;
     virtual bool isRedirect() const;
     virtual std::string getMimeType() const;
@@ -376,6 +380,7 @@ inline std::string computeNewUrl(const std::string &filename) {
 }
 
 Article::Article(const std::string& path) {
+  invalid = false;
 
   /* aid */
   aid = path.substr(directoryPath.size()+1);
@@ -446,6 +451,7 @@ Article::Article(const std::string& path) {
       redirectAid = computeAbsolutePath(aid, decodeUrl(targetUrl));
       if (!fileExists(directoryPath + "/" + redirectAid)) {
 	redirectAid.clear();
+	invalid = true;
       }
     }
 
@@ -456,6 +462,11 @@ Article::Article(const std::string& path) {
 std::string Article::getAid() const
 {
   return aid;
+}
+
+bool Article::isInvalid() const
+{
+  return invalid;
 }
 
 char Article::getNamespace() const
@@ -521,7 +532,9 @@ const zim::writer::Article* ArticleSource::getNextArticle() {
     metadataQueue.pop();
     article = new MetadataArticle(path);
   } else if (popFromFilenameQueue(path)) {
-    article = new Article(path);
+    do {
+      article = new Article(path);
+    } while (article && article->isInvalid() && popFromFilenameQueue(path));
   } else {
     article = NULL;
   }
