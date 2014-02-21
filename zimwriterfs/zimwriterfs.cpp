@@ -69,6 +69,7 @@ inline std::string getFileContent(const std::string &path) {
     in.close();
     return(contents);
   }
+  std::cerr << "Unable to open file at path: " << path << std::endl;
   throw(errno);
 }
 
@@ -138,11 +139,6 @@ inline std::string computeAbsolutePath(const std::string path, const std::string
   
   /* Remove wront trailing / */
   return absolutePath.substr(0, absolutePath.length()-1);
-}
-
-inline std::string rewriteUrl(std::string) {
-  std::string result;
-  return result;
 }
 
 void directoryVisitorRunning(bool value) {
@@ -616,6 +612,23 @@ zim::Blob ArticleSource::getData(const std::string& aid) {
       dataSize = html.length();
       data = new char[dataSize];
       memcpy(data, html.c_str(), dataSize);
+    } else if (getMimeTypeForFile(aid).find("text/css") == 0) {
+      std::string css = getFileContent(aidPath);
+      size_t startPos = 0;
+      size_t endPos = 0;
+      std::string url;
+
+      while ((startPos = css.find("url(", endPos)) && startPos != std::string::npos) {
+	endPos = css.find(")", startPos);
+	startPos = startPos + (css[startPos+4] == '\'' || css[startPos+4] == '"' ? 5 : 4);
+	endPos = endPos - (css[endPos-1] == '\'' || css[endPos-1] == '"' ? 1 : 0);
+	url = css.substr(startPos, endPos - startPos);
+	replaceStringInPlace(css, url, computeNewUrl(computeAbsolutePath(aid, url)));
+      }
+
+      dataSize = css.length();
+      data = new char[dataSize];
+      memcpy(data, css.c_str(), dataSize);
     } else {
       dataSize = getFileSize(aidPath);
       data = new char[dataSize];
