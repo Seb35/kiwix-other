@@ -31,10 +31,10 @@ var idBlackList = [ 'purgelink' ];
 var rootPath = 'static/';
 
 /* Parsoid URL */
-var parsoidUrl = 'http://parsoid-lb.eqiad.wikimedia.org/enwiki/';
+var parsoidUrl = 'http://parsoid-lb.eqiad.wikimedia.org/ckbwiki/';
 
 /* Wikipedia/... URL */
-var hostUrl = 'http://en.wikipedia.org/';
+var hostUrl = 'http://ckb.wikipedia.org/';
 
 /* Namespaces to mirror */
 var namespacesToMirror = [ '' ];
@@ -115,6 +115,8 @@ var htmlminifier = require('html-minifier');
 var hiredis = require( 'hiredis' );
 var redis = require( 'redis' );
 var lineByLineReader = require( 'line-by-line' );
+var childProcess = require('child_process');
+var exec = require('child_process').exec;
 
 /************************************/
 /* RUNNING CODE *********************/
@@ -145,7 +147,6 @@ async.series([
 //    function( finished ) { getArticleIdsFromFile( finished ) }, 
 //    function( finished ) { createMainPage( finished ) },
     function( finished ) { getArticleIds( finished ) }, 
-    function( finished ) { getRedirectIds( finished ) },
     function( finished ) { saveRedirects( finished ) },
     function( finished ) { saveArticles( finished ) },
     function( finished ) { endProcess( finished ) },
@@ -739,54 +740,85 @@ function getArticleIdsFromFile( finished ) {
 
 /* Get ids */
 function getArticleIds( finished ) {
-    namespacesToMirror.map( function( namespace ) {
-	var next = "";
+    var next = '';
 
-	do {
-	    console.info( 'Getting article ids' + ( next ? ' (from ' + ( namespace ? namespace + ':' : '') + next  + ')' : '' ) + '...' );
-	    var url = apiUrl + 'action=query&generator=allpages&gapfilterredir=nonredirects&gaplimit=500&prop=revisions&gapnamespace=' + namespaces[ namespace ] + '&format=json&gapcontinue=' + encodeURIComponent( next );
-	    var body = loadUrlSync( url );
-	    var entries = JSON.parse( body )['query']['pages'];
-	    Object.keys( entries ).map( function( key ) {
-		var entry = entries[key];
-		articleIds[entry['title'].replace( / /g, '_' )] = entry['revisions'][0]['revid'];
-	    });
-	    next = JSON.parse( body )['query-continue'] ? JSON.parse( body )['query-continue']['allpages']['gapcontinue'] : undefined;
-	} while ( next );
-    });
-
-    finished();
-}
-
-function getRedirectIds( finished ) {
-    console.log( 'Getting redirect ids...' );
-
-    function callback( articleId, finished ) { 
-	var url = apiUrl + 'action=query&list=backlinks&blfilterredir=redirects&bllimit=500&format=json&bltitle=' + encodeURIComponent( articleId );
-	loadUrlAsync( url, function( body, articleId ) {
-            console.info( 'Getting redirects for article ' + articleId + '...' );
-	    try {
-		var entries;
-		entries = JSON.parse( body )['query']['backlinks'];
-		entries.map( function( entry ) {
-		    redisClient.hset( redisRedirectsDatabase, entry['title'].replace( / /g, '_' ), articleId );
+    function getArticleIdsForNamespace( namespace, finished ) {
+	next = '';
+	
+	async.doWhilst(
+	    function ( finished ) {
+		console.info( 'Getting article ids' + ( next ? ' (from ' + ( namespace ? namespace + ':' : '') + next  + ')' : '' ) + '...' );
+		var url = apiUrl + 'action=query&generator=allpages&gapfilterredir=nonredirects&gaplimit=500&prop=revisions&gapnamespace=' + namespaces[ namespace ] + '&format=json&gapcontinue=' + encodeURIComponent( next );
+		var body = loadUrlAsync( url, function( body ) {
+		    var entries = JSON.parse( body )['query']['pages'];
+		    Object.keys( entries ).map( function( key ) {
+			var entry = entries[key];
+			entry['title'] = entry['title'].replace( / /g, '_' );
+			if ( entry['revisions'] !== undefined ) {
+			    articleIds[entry['title']] = entry['revisions'][0]['revid'];
+			    queue.push( entry['title'], function ( error ) {
+				if ( error ) {
+				    finished( error );
+				}
+			    });
+			}
+		    });
+		    next = JSON.parse( body )['query-continue'] ? JSON.parse( body )['query-continue']['allpages']['gapcontinue'] : undefined;
+		    finished();
 		});
-		finished();
-	    } catch( error ) {
-		finished( error );
+	    },
+	    function () { return next; },
+	    function ( error ) {
+		if ( error ) {
+		    console.error( 'Unable to download article ids: ' + error );
+		    process.exit( 1 );
+		} else {
+		    finished();
+		}
 	    }
-	}, articleId);
+	);
     }
 
-    async.eachLimit( Object.keys(articleIds), maxParallelRequests, callback, function( error ) {
+    var queue = async.queue( function ( articleId, finished ) {
+	getRedirectIds( articleId, finished );
+    }, maxParallelRequests);
+
+    queue.drain = function( error ) {
 	if ( error ) {
-            console.error( 'Unable to get redirects for an article: ' + error );
-	    process.exit( 1 );
-	} else {
-	    console.log( 'All redirects were retrieved successfuly.' );
+	    console.error( 'Unable to retrieve redirects for an article: ' + error );
+            process.exit( 1 );
+	} else if ( next === 'finished' ){
+	    console.log('All articles have been checked for redirects.');
 	    finished();
 	}
+    };
+    
+    async.eachLimit( namespacesToMirror, maxParallelRequests, getArticleIdsForNamespace, function( error ) {
+	if ( error ) {
+            console.error( 'Unable to get all article ids for in a namespace: ' + error );
+	    process.exit( 1 );
+	} else {
+	    console.log( 'All article ids retrieved successfully.' );
+	    next = 'finished';
+	}
     });
+}
+
+function getRedirectIds( articleId, finished ) { 
+    var url = apiUrl + 'action=query&list=backlinks&blfilterredir=redirects&bllimit=500&format=json&bltitle=' + encodeURIComponent( articleId );
+    loadUrlAsync( url, function( body ) {
+        console.info( 'Getting redirects for article ' + articleId + '...' );
+	try {
+	    var entries;
+	    entries = JSON.parse( body )['query']['backlinks'];
+	    entries.map( function( entry ) {
+		redisClient.hset( redisRedirectsDatabase, entry['title'].replace( / /g, '_' ), articleId );
+	    });
+	    finished();
+	} catch( error ) {
+	    finished( error );
+	}
+    }, articleId);
 }
 
 /* Create directories for static files */
@@ -969,7 +1001,6 @@ process.on( 'uncaughtException', function( error ) {
 
 function downloadFile( url, path, force ) {
     var data;
-    var tryCount = 0;
 
     fs.exists( path, function ( exists ) {
 	if ( exists && !force ) {
@@ -980,31 +1011,33 @@ function downloadFile( url, path, force ) {
 	    
 	    createDirectoryRecursively( pathParser.dirname( path ) );
 
-	    async.whilst(
-		function() {
-		    return ( tryCount++ < maxTryCount );
-		},
-		function( finished ) {
-		    request.get( {url: url , timeout: 60000}, path, function( error, filename ) {
-			if ( error ) {
-			    console.error( 'Unable to download (try nb ' + tryCount + ') from ' + decodeURI( url ) + ' ( ' + error + ' )');
-			    if ( maxTryCount == 0 || tryCount < maxTryCount ) {
-				console.info( 'Sleeping for ' + tryCount + ' seconds and they retry.' );
-				sleep.sleep( tryCount );
-				error = undefined;
+	    request.get( {url: url , timeout: 60000}, path, function( error, filename ) {
+		if ( error ) {
+		    console.error( 'Unable to download ' + decodeURI( url ) + ' ( ' + error + ' )' );
+		} else {
+		    console.info( 'Successfuly downloaded ' + decodeURI( url ) );
+		    var ext = pathParser.extname( path || '' ).split( '.' )[1];
+		    ext = ext ? ext.toLowerCase() : ext;
+		    
+		    var cmd;
+		    if ( ext === 'jpg' || ext === 'jpeg' ) {
+			cmd = 'jpegoptim --strip-all -m50 "' + path + '"';
+		    } else if ( ext === 'png' ) {
+			cmd = 'pngquant --nofs --force --ext=".png" "' + path+ '"; ' + 
+			    'advdef -z -4 -i 5 "' + path+ '"';
+		    }
+
+		    if ( cmd ) {
+			var child = exec(cmd, function( error, stdout, stderr ) {
+			    if ( error ) {
+				console.error( 'Failed to optim ' + path + ' (' + error + ')' );
+			    } else {
+				console.info( 'Successfuly optimized ' + path );
 			    }
-			} else {
-			    tryCount = maxTryCount;
-			}
-			finished( error );
-		    });
-		},
-		function( error ) {
-		    if ( error ) {
-			console.error( 'Abandon retrieving of ' + decodeURI( url ) );
+			});
 		    }
 		}
-	    );
+	    });
 	}
     });
 }

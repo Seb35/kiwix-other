@@ -623,7 +623,10 @@ zim::Blob ArticleSource::getData(const std::string& aid) {
 	startPos = startPos + (css[startPos+4] == '\'' || css[startPos+4] == '"' ? 5 : 4);
 	endPos = endPos - (css[endPos-1] == '\'' || css[endPos-1] == '"' ? 1 : 0);
 	url = css.substr(startPos, endPos - startPos);
-	replaceStringInPlace(css, url, computeNewUrl(computeAbsolutePath(aid, url)));
+	
+	if (url.substr(0, 5) != "data:") {
+	  replaceStringInPlace(css, url, computeNewUrl(computeAbsolutePath(aid, url)));
+	}
       }
 
       dataSize = css.length();
