@@ -31,10 +31,10 @@ var idBlackList = [ 'purgelink' ];
 var rootPath = 'static/';
 
 /* Parsoid URL */
-var parsoidUrl = 'http://parsoid-lb.eqiad.wikimedia.org/bmwiki/';
+var parsoidUrl = 'http://parsoid-lb.eqiad.wikimedia.org/ckbwiki/';
 
 /* Wikipedia/... URL */
-var hostUrl = 'http://bm.wikipedia.org/';
+var hostUrl = 'http://ckb.wikipedia.org/';
 
 /* Namespaces to mirror */
 var namespacesToMirror = [ '' ];
@@ -115,6 +115,8 @@ var htmlminifier = require('html-minifier');
 var hiredis = require( 'hiredis' );
 var redis = require( 'redis' );
 var lineByLineReader = require( 'line-by-line' );
+var childProcess = require('child_process');
+var exec = require('child_process').exec;
 
 /************************************/
 /* RUNNING CODE *********************/
@@ -752,12 +754,14 @@ function getArticleIds( finished ) {
 		    Object.keys( entries ).map( function( key ) {
 			var entry = entries[key];
 			entry['title'] = entry['title'].replace( / /g, '_' );
-			articleIds[entry['title']] = entry['revisions'][0]['revid'];
-			queue.push( entry['title'], function ( error ) {
-			    if ( error ) {
-				finished( error );
-			    }
-			});
+			if ( entry['revisions'] !== undefined ) {
+			    articleIds[entry['title']] = entry['revisions'][0]['revid'];
+			    queue.push( entry['title'], function ( error ) {
+				if ( error ) {
+				    finished( error );
+				}
+			    });
+			}
 		    });
 		    next = JSON.parse( body )['query-continue'] ? JSON.parse( body )['query-continue']['allpages']['gapcontinue'] : undefined;
 		    finished();
@@ -997,7 +1001,6 @@ process.on( 'uncaughtException', function( error ) {
 
 function downloadFile( url, path, force ) {
     var data;
-    var tryCount = 0;
 
     fs.exists( path, function ( exists ) {
 	if ( exists && !force ) {
@@ -1008,31 +1011,33 @@ function downloadFile( url, path, force ) {
 	    
 	    createDirectoryRecursively( pathParser.dirname( path ) );
 
-	    async.whilst(
-		function() {
-		    return ( tryCount++ < maxTryCount );
-		},
-		function( finished ) {
-		    request.get( {url: url , timeout: 60000}, path, function( error, filename ) {
-			if ( error ) {
-			    console.error( 'Unable to download (try nb ' + tryCount + ') from ' + decodeURI( url ) + ' ( ' + error + ' )');
-			    if ( maxTryCount == 0 || tryCount < maxTryCount ) {
-				console.info( 'Sleeping for ' + tryCount + ' seconds and they retry.' );
-				sleep.sleep( tryCount );
-				error = undefined;
+	    request.get( {url: url , timeout: 60000}, path, function( error, filename ) {
+		if ( error ) {
+		    console.error( 'Unable to download ' + decodeURI( url ) + ' ( ' + error + ' )' );
+		} else {
+		    console.info( 'Successfuly downloaded ' + decodeURI( url ) );
+		    var ext = pathParser.extname( path || '' ).split( '.' )[1];
+		    ext = ext ? ext.toLowerCase() : ext;
+		    
+		    var cmd;
+		    if ( ext === 'jpg' || ext === 'jpeg' ) {
+			cmd = 'jpegoptim --strip-all -m50 "' + path + '"';
+		    } else if ( ext === 'png' ) {
+			cmd = 'pngquant --nofs --force --ext=".png" "' + path+ '"; ' + 
+			    'advdef -z -4 -i 5 "' + path+ '"';
+		    }
+
+		    if ( cmd ) {
+			var child = exec(cmd, function( error, stdout, stderr ) {
+			    if ( error ) {
+				console.error( 'Failed to optim ' + path + ' (' + error + ')' );
+			    } else {
+				console.info( 'Successfuly optimized ' + path );
 			    }
-			} else {
-			    tryCount = maxTryCount;
-			}
-			finished( error );
-		    });
-		},
-		function( error ) {
-		    if ( error ) {
-			console.error( 'Abandon retrieving of ' + decodeURI( url ) );
+			});
 		    }
 		}
-	    );
+	    });
 	}
     });
 }
