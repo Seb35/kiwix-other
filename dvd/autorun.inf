@@ -1,0 +1,8 @@
+[autorun]
+open=autorun\autorun.exe
+shell\kiwix=Launch Kiwix
+shell\kiwix\command=autorun\autorun.exe
+shell=kiwix
+icon=autorun\autorun.ico
+label=Kiwix
+action=Launch Kiwix
