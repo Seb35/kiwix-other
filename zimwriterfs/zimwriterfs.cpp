@@ -605,7 +605,7 @@ zim::Blob ArticleSource::getData(const std::string& aid) {
       for(it = links.begin(); it != links.end(); it++) {
 	if (!it->first.empty() && it->first[0] != '#') {
 	  replaceStringInPlace(html, "\"" + it->first + "\"", "\"" + computeNewUrl(computeAbsolutePath(aid, it->first)) + "\"");
-	  replaceStringInPlace(html, "\'" + it->first + "\"", "\"" + computeNewUrl(computeAbsolutePath(aid, it->first)) + "\'");
+	  replaceStringInPlace(html, "\'" + it->first + "\'", "\'" + computeNewUrl(computeAbsolutePath(aid, it->first)) + "\'");
 	}
       }
       gumbo_destroy_output(&kGumboDefaultOptions, output);
