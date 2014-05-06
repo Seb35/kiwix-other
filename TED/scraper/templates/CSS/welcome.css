@@ -38,6 +38,19 @@ hr {
 	margin: 25px 0;
 }
 
+a {
+    text-decoration: none;
+    color: inherit;
+}
+
+a:visited {
+    color: purple;
+}
+
+a:hover {
+    color: red;
+}
+
 #author {
     font-family: "RobotoLight";
     font-size: 15px;
@@ -46,6 +59,10 @@ hr {
 #title {
     font-family: "RobotoBold";
     font-size: 18px;
+}
+
+#title-img {
+    width: 280px;
 }
 
 #meta-data {
@@ -104,7 +121,7 @@ ul.grid-nav li a.active {
 ul.rig {
 	list-style: none;
 	font-size: 0px;
-	margin-left: -2.5%; /* should match li left margin */
+	margin-left: -2.5%;
 }
 ul.rig li {
 	display: inline-block;
@@ -119,8 +136,6 @@ ul.rig li {
 }
 
 ul.rig li img {
-	max-width: 100%;
-	height: auto;
 	margin: 0 0 10px;
 }
 
@@ -138,34 +153,49 @@ ul.rig.grid li {
 	cursor: pointer;
 }
 
+
 @media (max-width: 1199px) {
-	.container {
-		width: auto;
-		padding: 0 10px;
-	}
+    .container {
+        width: auto;
+        padding: 0 10px;
+    }
+
+    ul.rig.grid li {
+        width: 30.83%;
+    }
 }
 
-@media (max-width: 480px) {
-	ul.grid-nav li {
-		display: block;
-		margin: 0 0 5px;
-	}
-	ul.grid-nav li a {
-		display: block;
-	}
-	ul.rig {
-		margin-left: 0;
-	}
-	ul.rig li {
-		width: 100% !important; /* over-ride all li styles */
-		margin: 0 0 20px;
-	}
+@media (max-width: 820px) {
+    .container {
+        width: auto;
+        padding: 0 10px;
+    }
+
+    ul.rig.grid li {
+        width: 47.5%;
+    }
+}
+
+@media (max-width: 530px) {
+    .container {
+        width: auto;
+        padding: 0 10px;
+    }
+
+    #video-items {
+        padding: 20px;
+    }
+
+    ul.rig.grid li {
+        width: 100%;
+    }
 }
 
 div#menuwrapper {
+    margin-top: 10px;
     margin-left: auto;
     margin-right: auto;
-    width: 700px;
+    text-align: center;
 }
 
 div#content {
@@ -178,10 +208,7 @@ nav ul {
     padding: 0px;
     margin: 0px;
     margin-right: 10px;
-    /* width: 400px; */
     box-shadow: 2px 2px 2px #dfdfdf;
-    -moz-box-shadow: 2px 2px 2px #dfdfdf;
-    -webkit-box-shadow: 2px 2px 2px #dfdfdf;
 }
 
 nav ul:after {
@@ -246,3 +273,57 @@ nav ul li ul li a:hover{
     color: #333;
     background-color: #FAFAFA !important;
 }
+
+.pagination {
+  margin: 2.5em auto;
+  background: #FFF;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  border-radius: 3px;
+  width: 200px;
+  text-align: center;
+  height: 50px;
+  display: flex; 
+  display: -webkit-flex;
+}
+
+.pagination-text {
+    margin: auto;
+}
+
+.left-arrow {
+    cursor: pointer;
+    width:20px;
+    padding-left:20px;
+    padding-right:20px;
+    margin: auto auto auto auto;
+}
+
+.right-arrow {
+    cursor: pointer;
+    width:20px;
+    padding-left:20px;
+    padding-right:20px;
+    margin: auto auto auto auto;
+ }
+
+a.nostyle:link {
+    text-decoration: none;
+    color: #000000;
+}
+
+a.nostyle:visited {
+    text-decoration: none;
+    color: #000000;
+}
+
+a.nostyle:hover {
+    background-color: #FF2B06;
+    text-decoration: none;
+    color: #000000;
+}
+
+a.nostyle:active {
+    text-decoration: none;
+    color: #000000;
+}
+
