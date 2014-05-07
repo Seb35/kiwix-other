@@ -353,7 +353,11 @@ inline std::string getNamespaceForMimeType(const std::string& mimeType) {
       return "-";
     }
   } else {
-    return "I";
+    if (mimeType == "application/x-font-ttf" || mimeType == "application/vnd.ms-opentype") {
+      return "-";
+    } else {
+      return "I";
+    }
   }
 }
 
@@ -731,6 +735,10 @@ int main(int argc, char** argv) {
   extMimeTypes["js"] = "application/javascript";
   extMimeTypes["CSS"] = "text/css";
   extMimeTypes["css"] = "text/css";
+  extMimeTypes["otf"] = "application/vnd.ms-opentype";
+  extMimeTypes["OTF"] = "application/vnd.ms-opentype";
+  extMimeTypes["ttf"] = "application/x-font-ttf";
+  extMimeTypes["TTF"] = "application/x-font-ttf";
 
   /* Argument parsing */
   static struct option long_options[] = {
