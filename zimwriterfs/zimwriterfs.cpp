@@ -173,7 +173,6 @@ inline std::string computeAbsolutePath(const std::string path, const std::string
 
 /* Warning: the relative path must be with slashes */
 std::string computeRelativePath(const std::string path, const std::string absolutePath) {
-  std::cout << path << " + " << absolutePath << std::endl;
   std::vector<std::string> pathParts = split(path, "/");
   std::vector<std::string> absolutePathParts = split(absolutePath, "/");
 
@@ -185,8 +184,6 @@ std::string computeRelativePath(const std::string path, const std::string absolu
       commonCount++;
     }
   }
-  
-  std::cout << commonCount << std::endl;
     
   std::string relativePath;
   for (unsigned int i = commonCount ; i < pathParts.size()-1 ; i++) {
@@ -198,7 +195,6 @@ std::string computeRelativePath(const std::string path, const std::string absolu
     relativePath += i + 1 < absolutePathParts.size() ? "/" : "";
   }
 
-  std::cout <<  " -> " << relativePath << std::endl;
   return relativePath;
 }
 
