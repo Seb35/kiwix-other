@@ -52,7 +52,6 @@ pthread_mutex_t directoryVisitorRunningMutex;
 bool isDirectoryVisitorRunningFlag = false;
 magic_t magic;
 std::map<std::string, unsigned int> counters;
-std::map<std::string, std::string> urls;
 std::map<std::string, std::string> fileMimeTypes;
 std::map<std::string, std::string> extMimeTypes;
 char *data = NULL;
@@ -118,6 +117,37 @@ inline std::string removeLastPathElement(const std::string path, const bool remo
   return newPath;
 }
 
+/* Split string in a token array */
+std::vector<std::string> split(const std::string & str,
+                                      const std::string & delims=" *-")
+{
+  std::string::size_type lastPos = str.find_first_not_of(delims, 0);
+  std::string::size_type pos = str.find_first_of(delims, lastPos);
+  std::vector<std::string> tokens;
+
+  while (std::string::npos != pos || std::string::npos != lastPos)
+    {
+      tokens.push_back(str.substr(lastPos, pos - lastPos));
+      lastPos = str.find_first_not_of(delims, pos);
+      pos     = str.find_first_of(delims, lastPos);
+    }
+
+  return tokens;
+}
+
+std::vector<std::string> split(const char* lhs, const char* rhs){
+  const std::string m1 (lhs), m2 (rhs);
+  return split(m1, m2);
+}
+
+std::vector<std::string> split(const char* lhs, const std::string& rhs){
+  return split(lhs, rhs.c_str());
+}
+
+std::vector<std::string> split(const std::string& lhs, const char* rhs){
+  return split(lhs.c_str(), rhs);
+}
+
 /* Warning: the relative path must be with slashes */
 inline std::string computeAbsolutePath(const std::string path, const std::string relativePath) {
 
@@ -139,6 +169,37 @@ inline std::string computeAbsolutePath(const std::string path, const std::string
   
   /* Remove wront trailing / */
   return absolutePath.substr(0, absolutePath.length()-1);
+}
+
+/* Warning: the relative path must be with slashes */
+std::string computeRelativePath(const std::string path, const std::string absolutePath) {
+  std::cout << path << " + " << absolutePath << std::endl;
+  std::vector<std::string> pathParts = split(path, "/");
+  std::vector<std::string> absolutePathParts = split(absolutePath, "/");
+
+  unsigned int commonCount = 0;
+  while (commonCount < pathParts.size() && 
+	 commonCount < absolutePathParts.size() && 
+	 pathParts[commonCount] == absolutePathParts[commonCount]) {
+    if (!pathParts[commonCount].empty()) {
+      commonCount++;
+    }
+  }
+  
+  std::cout << commonCount << std::endl;
+    
+  std::string relativePath;
+  for (unsigned int i = commonCount ; i < pathParts.size()-1 ; i++) {
+    relativePath += "../";
+  }
+
+  for (unsigned int i = commonCount ; i < absolutePathParts.size() ; i++) {
+    relativePath += absolutePathParts[i];
+    relativePath += i + 1 < absolutePathParts.size() ? "/" : "";
+  }
+
+  std::cout <<  " -> " << relativePath << std::endl;
+  return relativePath;
 }
 
 void directoryVisitorRunning(bool value) {
@@ -370,13 +431,13 @@ inline std::string removeLocalTag(const std::string &url) {
   return url;
 }
 
-inline std::string computeNewUrl(const std::string &filename) {
-  if ( urls.find(filename) == urls.end() ) {
-    std::string mimeType = getMimeTypeForFile(removeLocalTag(decodeUrl(filename)));
-    std::string url = "/" + getNamespaceForMimeType(mimeType) + "/" + filename;
-    urls[filename] = url;
-  }
-  return urls[filename];
+inline std::string computeNewUrl(const std::string &aid, const std::string &url) {
+  std::string filename = computeAbsolutePath(aid, url);
+  std::string targetMimeType = getMimeTypeForFile(removeLocalTag(decodeUrl(filename)));
+  std::string originMimeType = getMimeTypeForFile(aid);
+  std::string newUrl = "/" + getNamespaceForMimeType(targetMimeType) + "/" + filename;
+  std::string baseUrl = "/" + getNamespaceForMimeType(originMimeType) + "/" + aid;
+  return computeRelativePath(baseUrl, newUrl);
 }
 
 Article::Article(const std::string& path) {
@@ -598,27 +659,30 @@ zim::Blob ArticleSource::getData(const std::string& aid) {
     
     if (getMimeTypeForFile(aid).find("text/html") == 0) {
       std::string html = getFileContent(aidPath);
-      GumboOutput* output = gumbo_parse(html.c_str());
-      GumboNode* root = output->root;
       
       /* Rewrite links (src|href|...) attributes */
+      GumboOutput* output = gumbo_parse(html.c_str());
+      GumboNode* root = output->root;
+
       std::map<std::string, bool> links;
       getLinks(root, links);
       std::map<std::string, bool>::iterator it;
       std::string aidDirectory = removeLastPathElement(aid, false, false);
       for(it = links.begin(); it != links.end(); it++) {
 	if (!it->first.empty() && it->first[0] != '#') {
-	  replaceStringInPlace(html, "\"" + it->first + "\"", "\"" + computeNewUrl(computeAbsolutePath(aid, it->first)) + "\"");
-	  replaceStringInPlace(html, "\'" + it->first + "\'", "\'" + computeNewUrl(computeAbsolutePath(aid, it->first)) + "\'");
+	  replaceStringInPlace(html, "\"" + it->first + "\"", "\"" + computeNewUrl(aid, it->first) + "\"");
+	  replaceStringInPlace(html, "\'" + it->first + "\'", "\'" + computeNewUrl(aid, it->first) + "\'");
 	}
       }
       gumbo_destroy_output(&kGumboDefaultOptions, output);
-      
+
       dataSize = html.length();
       data = new char[dataSize];
       memcpy(data, html.c_str(), dataSize);
     } else if (getMimeTypeForFile(aid).find("text/css") == 0) {
       std::string css = getFileContent(aidPath);
+
+      /* Rewrite url() values in the CSS */
       size_t startPos = 0;
       size_t endPos = 0;
       std::string url;
@@ -630,7 +694,7 @@ zim::Blob ArticleSource::getData(const std::string& aid) {
 	url = css.substr(startPos, endPos - startPos);
 	
 	if (url.substr(0, 5) != "data:") {
-	  replaceStringInPlace(css, url, computeNewUrl(computeAbsolutePath(aid, url)));
+	  replaceStringInPlace(css, url, computeNewUrl(aid, url));
 	}
       }
 
