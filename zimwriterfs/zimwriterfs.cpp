@@ -460,7 +460,10 @@ inline std::string getNamespaceForMimeType(const std::string& mimeType) {
       return "-";
     }
   } else {
-    if (mimeType == "application/x-font-ttf" || mimeType == "application/vnd.ms-opentype") {
+    if (mimeType == "application/font-ttf" || 
+	mimeType == "application/font-woff" ||
+	mimeType == "application/vnd.ms-opentype"
+	) {
       return "-";
     } else {
       return "I";
@@ -745,7 +748,9 @@ zim::Blob ArticleSource::getData(const std::string& aid) {
 	  /* Embeded fonts need to be inline because Kiwix is
 	     otherwise not able to load same because of the
 	     same-origin security */
-	  if (mimeType == "application/x-font-ttf" ||  mimeType == "application/vnd.ms-opentype") {
+	  if (mimeType == "application/font-ttf" || 
+	      mimeType == "application/font-woff" || 
+	      mimeType == "application/vnd.ms-opentype") {
 	    std::string fontPath = directoryPath + "/" + computeAbsolutePath(aid, url);
 	    std::string fontContent = getFileContent(fontPath);
 	    replaceStringInPlace(css, url, "data:" + mimeType + ";base64," + base64_encode(reinterpret_cast<const unsigned char*>(fontContent.c_str()), fontContent.length()));
@@ -858,8 +863,10 @@ int main(int argc, char** argv) {
   extMimeTypes["css"] = "text/css";
   extMimeTypes["otf"] = "application/vnd.ms-opentype";
   extMimeTypes["OTF"] = "application/vnd.ms-opentype";
-  extMimeTypes["ttf"] = "application/x-font-ttf";
-  extMimeTypes["TTF"] = "application/x-font-ttf";
+  extMimeTypes["ttf"] = "application/font-ttf";
+  extMimeTypes["TTF"] = "application/font-ttf";
+  extMimeTypes["woff"] = "application/font-woff";
+  extMimeTypes["WOFF"] = "application/font-woff";
 
   /* Argument parsing */
   static struct option long_options[] = {
